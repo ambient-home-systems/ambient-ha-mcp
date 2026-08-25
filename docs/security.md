@@ -62,6 +62,29 @@ Safety findings are sensor-state reports, not declarations about physical realit
 The server never claims that an active smoke, carbon-monoxide, moisture, or problem
 sensor proves an emergency, and it cannot contact emergency services.
 
+Automation configuration and trace data are especially sensitive. Phase 5:
+
+- reads loaded definitions and stored traces only through authenticated Home
+  Assistant WebSocket commands and never reads `automations.yaml` or `.storage`;
+- treats aliases, descriptions, templates, trigger values, action data, URLs, and
+  messages as untrusted data, never instructions;
+- never renders or executes Jinja and never executes services, scripts, scenes,
+  automations, trace debugging, or breakpoints;
+- recursively bounds returned structures and redacts URL values, webhook IDs,
+  authorization/credential/secret/token/password/API-key fields, message/title/
+  command content, notification targets, and shell-command targets; and
+- uses context IDs internally while omitting Home Assistant context user IDs.
+  A user-bearing context is represented only as `origin: user`.
+
+Secret filtering is defense in depth, not permission to store credentials inside
+automation text. Users should keep secrets in Home Assistant's supported secret
+facilities and avoid embedding credentials in descriptions, messages, or URLs.
+
+Automation configuration and trace commands require a Home Assistant administrator
+in current Core. A valid non-admin token may be sufficient for ordinary state reads
+but unable to use Phase 5 enrichment; that limitation is returned without enabling
+any broader interface.
+
 ## Logs
 
 Application logs are structured JSON with timestamp, level, logger, message, and

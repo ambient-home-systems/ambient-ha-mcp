@@ -43,6 +43,7 @@ async def test_real_home_assistant_connection() -> None:
     openings = await client.get_openings(OpeningFilters(limit=5))
     lights = await client.get_lights_on(LocationFilters(limit=5))
     diagnostics = await client.diagnose_home(limit=5)
+    automations = await client.list_automations(query=None, enabled=None, limit=5)
 
     assert summary.total_entities >= summary.unavailable_entities
     assert unavailable.returned <= 5
@@ -50,6 +51,7 @@ async def test_real_home_assistant_connection() -> None:
     assert openings.returned <= 5
     assert lights.returned <= 5
     assert diagnostics.returned <= 5
+    assert automations.returned <= 5
 
     if entities.entities:
         entity_id = entities.entities[0].entity_id
@@ -66,3 +68,37 @@ async def test_real_home_assistant_connection() -> None:
         assert history.returned <= 5
         assert logbook.returned <= 5
         assert changes.returned <= 5
+
+        entity_found, references = await client.find_automations_for_entity(entity_id, limit=5)
+        cause_found, causes = await client.find_activity_cause(
+            entity_id,
+            timestamp=None,
+            start=start,
+            end=None,
+            window_seconds=60,
+            limit=5,
+        )
+
+        assert entity_found is True
+        assert references.returned <= 5
+        assert cause_found is True
+        assert causes.returned <= 5
+
+    if automations.automations:
+        automation_id = automations.automations[0].entity_id
+        _supported, found, definition = await client.get_automation(automation_id)
+        trace_entity_found, traces = await client.get_automation_traces(automation_id, limit=5)
+
+        assert found is True
+        assert definition is not None
+        assert trace_entity_found is True
+        assert traces.returned <= 5
+
+        if traces.traces:
+            supported, trace_found, trace = await client.get_automation_trace(
+                automation_id, traces.traces[0].run_id
+            )
+            assert isinstance(supported, bool)
+            if supported:
+                assert trace_found is True
+                assert trace is not None

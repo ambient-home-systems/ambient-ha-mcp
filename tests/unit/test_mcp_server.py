@@ -4,9 +4,18 @@ from mcp import Client
 from mcp.server.transport_security import TransportSecuritySettings
 
 from ambient_ha.config import Settings
+from ambient_ha.ha.automation import (
+    AutomationCatalog,
+    find_automation_references,
+    list_automations,
+    normalize_automation_definition,
+    normalize_automation_trace,
+    normalize_trace_summaries,
+)
 from ambient_ha.ha.discovery import DiscoveryResolver
 from ambient_ha.ha.home import HomeAnalyzer
 from ambient_ha.models import ConnectionStatus, HomeAssistantServerInfo
+from ambient_ha.models.automation import ActivityCauseReport, CausalityEvidence
 from ambient_ha.models.discovery import EntitySearchFilters
 from ambient_ha.models.history import (
     EntityHistoryPage,
@@ -21,6 +30,12 @@ from ambient_ha.models.home import (
     UnavailableEntityFilters,
 )
 from ambient_ha.server import build_mcp_server
+from tests.fixtures.automation import (
+    AUTOMATION_CONFIGS,
+    AUTOMATION_STATES,
+    FULL_TRACE,
+    TRACE_SUMMARY,
+)
 from tests.fixtures.discovery import REGISTRIES, STATES
 from tests.fixtures.home import HOME_REGISTRIES, HOME_STATES
 
@@ -116,6 +131,67 @@ class FakeGateway:
 
     async def diagnose_home(self, *, limit: int):
         return self.home_analyzer.diagnose(limit=limit)
+
+    async def list_automations(self, *, query: str | None, enabled: bool | None, limit: int):
+        return list_automations(AUTOMATION_STATES, query=query, enabled=enabled, limit=limit)
+
+    async def get_automation(self, entity_id: str):
+        state = next((item for item in AUTOMATION_STATES if item["entity_id"] == entity_id), None)
+        if state is None:
+            return True, False, None
+        return (
+            True,
+            True,
+            normalize_automation_definition(
+                state, AUTOMATION_CONFIGS.get(entity_id), supported=True
+            ),
+        )
+
+    async def find_automations_for_entity(self, entity_id: str, *, limit: int):
+        page = find_automation_references(
+            AutomationCatalog(
+                supported=True,
+                configurations=AUTOMATION_CONFIGS,
+                missing=frozenset(),
+                entity_device_ids={"light.kitchen": "device-light"},
+            ),
+            entity_id,
+            limit=limit,
+        )
+        return True, page
+
+    async def get_automation_traces(self, entity_id: str, *, limit: int):
+        return True, normalize_trace_summaries(
+            entity_id, [TRACE_SUMMARY], limit=limit, supported=True
+        )
+
+    async def get_automation_trace(self, entity_id: str, run_id: str):
+        return True, True, normalize_automation_trace(entity_id, run_id, FULL_TRACE)
+
+    async def find_activity_cause(self, entity_id: str, **kwargs: object):
+        limit = int(kwargs.get("limit", 10))
+        evidence = CausalityEvidence(
+            source="automation",
+            relationship="confirmed_by_context",
+            confidence="confirmed",
+            event_timestamp="2024-08-25T02:14:02+00:00",
+            automation_id="automation.motion_light",
+            run_id="run-1",
+            context_relationship="same_context",
+            supporting_facts=["Home Assistant directly links the contexts."],
+        )
+        return True, ActivityCauseReport(
+            entity_id=entity_id,
+            start="2024-08-25T02:13:02+00:00",
+            end="2024-08-25T02:15:02+00:00",
+            state_changes_found=1,
+            evidence=[evidence],
+            total_evidence=1,
+            returned=1,
+            limit=limit,
+            truncated=False,
+            complete=True,
+        )
 
 
 @pytest.mark.anyio
@@ -235,10 +311,50 @@ async def test_mcp_home_diagnostic_tools_are_registered_and_callable(settings: S
         "ha_get_lights_on",
         "ha_diagnose_home",
     } <= names
-    assert len(names) == 18
+    assert len(names) == 24
     assert summary.structured_content["summary"]["total_entities"] == len(HOME_STATES)
     assert unavailable.structured_content["result"]["total_matches"] == 1
     assert batteries.structured_content["result"]["total_matches"] == 1
     assert openings.structured_content["result"]["total_matches"] == 4
     assert lights.structured_content["result"]["total_matches"] == 1
     assert diagnostics.structured_content["report"]["returned"] == 3
+
+
+@pytest.mark.anyio
+async def test_mcp_automation_tools_are_registered_and_callable(settings: Settings) -> None:
+    server = build_mcp_server(settings, client=FakeGateway())
+
+    async with Client(server) as client:
+        listed = await client.list_tools()
+        automations = await client.call_tool("ha_list_automations", {"query": "Kitchen Motion"})
+        automation = await client.call_tool("ha_get_automation", {"automation": "motion_light"})
+        references = await client.call_tool(
+            "ha_find_automations_for_entity", {"entity_id": "light.kitchen"}
+        )
+        traces = await client.call_tool(
+            "ha_get_automation_traces", {"automation": "automation.motion_light"}
+        )
+        trace = await client.call_tool(
+            "ha_get_automation_trace",
+            {"automation": "motion_light", "run_id": "run-1"},
+        )
+        cause = await client.call_tool(
+            "ha_find_activity_cause",
+            {"entity_id": "light.kitchen", "timestamp": "2024-08-25T02:14:02Z"},
+        )
+
+    names = {tool.name for tool in listed.tools}
+    assert {
+        "ha_list_automations",
+        "ha_get_automation",
+        "ha_find_automations_for_entity",
+        "ha_get_automation_traces",
+        "ha_get_automation_trace",
+        "ha_find_activity_cause",
+    } <= names
+    assert automations.structured_content["result"]["returned"] == 1
+    assert automation.structured_content["automation"]["configuration_available"] is True
+    assert references.structured_content["result"]["total_matches"] >= 1
+    assert traces.structured_content["result"]["total_traces"] == 1
+    assert trace.structured_content["trace"]["run_id"] == "run-1"
+    assert cause.structured_content["result"]["evidence"][0]["confidence"] == "confirmed"

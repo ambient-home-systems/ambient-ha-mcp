@@ -4,9 +4,10 @@ Ambient Home Assistant MCP is a secure, semantic bridge that gives ChatGPT and
 other MCP clients purpose-built access to Home Assistant. It is the server
 foundation for the future user-facing **Ambient Home Assistant** application.
 
-> **Phase 4 status:** local/private and read-only. This release adds compact
-> whole-home summaries and deterministic diagnostics. It cannot control devices
-> or change Home Assistant. Phase 3.5 live validation remains blocked solely
+> **Phase 5 status:** local/private and read-only. This release adds automation
+> discovery, bounded stored-trace analysis, static reference indexing, and strict
+> causality evidence. It cannot run, enable, edit, or create automations and cannot
+> control devices. Phase 3.5/5 live validation remains blocked solely
 > because the required Home Assistant URL and token were unavailable; no
 > production-validation claim is made.
 
@@ -63,6 +64,12 @@ See [the architecture decision record](docs/architecture.md).
 | `ha_get_openings` | Lists doors, windows, garage doors, and other openings by semantic class. |
 | `ha_get_lights_on` | Lists compact current light entities reporting `on`. |
 | `ha_diagnose_home` | Returns deterministic, evidence-backed findings with exact severities. |
+| `ha_list_automations` | Lists compact current automation metadata with deterministic search. |
+| `ha_get_automation` | Returns a bounded, sanitized loaded automation definition when supported. |
+| `ha_find_automations_for_entity` | Finds conservative static entity/device/template references. |
+| `ha_get_automation_traces` | Lists compact metadata for recent stored automation traces. |
+| `ha_get_automation_trace` | Normalizes one bounded stored execution trace with nested paths. |
+| `ha_find_activity_cause` | Correlates Recorder contexts, traces, static references, and timing under strict evidence rules. |
 | `GET /health` | Reports application liveness and separate Home Assistant readiness. |
 
 No service calls, state changes, or administrative endpoints are implemented.
@@ -84,6 +91,15 @@ No service calls, state changes, or administrative endpoints are implemented.
 - Whole-home tools use one bulk current-state request plus the registry cache.
   Detail lists are bounded, raw tracker attributes are excluded, and safety text
   states only what Home Assistant reports.
+- Automation definitions use Home Assistant's admin-gated `automation/config`
+  WebSocket command. Stored traces use `trace/list`, `trace/get`, and
+  `trace/contexts`; unavailable commands degrade only those features.
+- Automation aliases, descriptions, templates, and action data are untrusted data.
+  Strings and structures are bounded, secret-like values and private action content
+  are redacted, Jinja is never executed, and context user IDs are never returned.
+- The reference index is an in-memory TTL snapshot with explicit refresh and a
+  500-automation bound. Current automation entity metadata and Recorder state
+  changes remain fresh.
 - MCP transport Host and Origin allowlists protect against DNS rebinding.
 - The policy engine allows reads and fails closed for every control class.
 - The container runs as a non-root user with a read-only filesystem in Compose.

@@ -1,5 +1,13 @@
 """Semantic read-only MCP tool services."""
 
+from ambient_ha.tools.automation import (
+    find_activity_cause,
+    find_automations_for_entity,
+    get_automation,
+    get_automation_trace,
+    get_automation_traces,
+    list_automations,
+)
 from ambient_ha.tools.diagnostics import connection_status, health_status, server_info
 from ambient_ha.tools.discovery import (
     domain_summary,
@@ -24,9 +32,14 @@ __all__ = [
     "connection_status",
     "diagnose_home",
     "domain_summary",
+    "find_activity_cause",
+    "find_automations_for_entity",
     "find_low_batteries",
     "find_unavailable_entities",
     "get_area",
+    "get_automation",
+    "get_automation_trace",
+    "get_automation_traces",
     "get_entity",
     "get_entity_history",
     "get_floor",
@@ -37,6 +50,7 @@ __all__ = [
     "get_recent_changes",
     "health_status",
     "list_areas",
+    "list_automations",
     "list_floors",
     "search_entities",
     "server_info",

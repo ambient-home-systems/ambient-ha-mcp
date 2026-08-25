@@ -4,12 +4,21 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
-from datetime import timedelta
-from typing import Protocol
+from datetime import datetime, timedelta
+from typing import Literal, Protocol
 
 import httpx
 
 from ambient_ha.config import Settings
+from ambient_ha.ha.automation import (
+    AutomationCatalog,
+    find_automation_references,
+    list_automations,
+    normalize_automation_definition,
+    normalize_automation_trace,
+    normalize_trace_summaries,
+    trace_target_execution_timestamp,
+)
 from ambient_ha.ha.cache import AsyncTTLCache
 from ambient_ha.ha.discovery import DiscoveryResolver
 from ambient_ha.ha.exceptions import (
@@ -22,15 +31,26 @@ from ambient_ha.ha.history import (
     build_recent_changes,
     normalize_history_payload,
     normalize_logbook_payload,
+    parse_timestamp,
     resolve_query_window,
 )
 from ambient_ha.ha.home import HomeAnalyzer
 from ambient_ha.ha.normalize import normalize_server_info
 from ambient_ha.ha.rest import HomeAssistantRestAPI
 from ambient_ha.ha.websocket import (
+    AutomationProvider,
     HomeAssistantWebSocketAPI,
     RegistryProvider,
     RegistrySnapshot,
+)
+from ambient_ha.models.automation import (
+    ActivityCauseReport,
+    AutomationDefinition,
+    AutomationListPage,
+    AutomationReferencesPage,
+    AutomationTrace,
+    AutomationTracesPage,
+    CausalityEvidence,
 )
 from ambient_ha.models.diagnostics import ConnectionStatus
 from ambient_ha.models.discovery import (
@@ -158,6 +178,49 @@ class HomeAssistantGateway(Protocol):
         """Return deterministic evidence-backed findings from one current snapshot."""
         ...
 
+    async def list_automations(
+        self, *, query: str | None, enabled: bool | None, limit: int
+    ) -> AutomationListPage:
+        """Return compact fresh automation entity metadata."""
+        ...
+
+    async def get_automation(
+        self, entity_id: str
+    ) -> tuple[bool, bool, AutomationDefinition | None]:
+        """Return supported, found, and a bounded normalized definition."""
+        ...
+
+    async def find_automations_for_entity(
+        self, entity_id: str, *, limit: int
+    ) -> tuple[bool, AutomationReferencesPage]:
+        """Return whether the entity exists plus conservative static references."""
+        ...
+
+    async def get_automation_traces(
+        self, entity_id: str, *, limit: int
+    ) -> tuple[bool, AutomationTracesPage]:
+        """Return whether the automation exists plus bounded trace metadata."""
+        ...
+
+    async def get_automation_trace(
+        self, entity_id: str, run_id: str
+    ) -> tuple[bool, bool, AutomationTrace | None]:
+        """Return supported, found, and one bounded normalized trace."""
+        ...
+
+    async def find_activity_cause(
+        self,
+        entity_id: str,
+        *,
+        timestamp: str | None,
+        start: str | None,
+        end: str | None,
+        window_seconds: int,
+        limit: int,
+    ) -> tuple[bool, ActivityCauseReport]:
+        """Correlate recorder and trace facts under strict evidence rules."""
+        ...
+
 
 class HomeAssistantClient:
     """Coordinate Home Assistant interfaces without leaking them to MCP tools.
@@ -172,6 +235,7 @@ class HomeAssistantClient:
         *,
         transport: httpx.AsyncBaseTransport | None = None,
         registry_provider: RegistryProvider | None = None,
+        automation_provider: AutomationProvider | None = None,
     ) -> None:
         self._settings = settings
         self._rest = HomeAssistantRestAPI(
@@ -180,12 +244,17 @@ class HomeAssistantClient:
             timeout_seconds=settings.request_timeout_seconds,
             transport=transport,
         )
-        self._registries = registry_provider or HomeAssistantWebSocketAPI(
+        websocket_api = HomeAssistantWebSocketAPI(
             base_url=settings.home_assistant_url,
             token=settings.home_assistant_token.get_secret_value(),
             timeout_seconds=settings.request_timeout_seconds,
         )
+        self._registries = registry_provider or websocket_api
+        self._automations = automation_provider or websocket_api
         self._registry_cache = AsyncTTLCache[RegistrySnapshot](settings.registry_cache_ttl_seconds)
+        self._automation_cache = AsyncTTLCache[AutomationCatalog](
+            settings.registry_cache_ttl_seconds
+        )
 
     async def check_connection(self) -> ConnectionStatus:
         """Return a stable, secret-free connection result."""
@@ -391,9 +460,269 @@ class HomeAssistantClient:
     async def diagnose_home(self, *, limit: int) -> HomeDiagnosticsReport:
         return (await self._home_analyzer()).diagnose(limit=limit)
 
+    async def list_automations(
+        self, *, query: str | None, enabled: bool | None, limit: int
+    ) -> AutomationListPage:
+        return list_automations(
+            await self._rest.get_states(), query=query, enabled=enabled, limit=limit
+        )
+
+    async def get_automation(
+        self, entity_id: str
+    ) -> tuple[bool, bool, AutomationDefinition | None]:
+        state = await self._rest.get_state(entity_id)
+        if state is None or not entity_id.startswith("automation."):
+            return True, False, None
+        batch = await self._automations.get_automation_configs([entity_id])
+        definition = normalize_automation_definition(
+            state,
+            batch.configurations.get(entity_id),
+            supported=batch.supported,
+        )
+        return batch.supported, True, definition
+
+    async def find_automations_for_entity(
+        self, entity_id: str, *, limit: int
+    ) -> tuple[bool, AutomationReferencesPage]:
+        current_state, catalog = await asyncio.gather(
+            self._rest.get_state(entity_id), self._automation_catalog()
+        )
+        return current_state is not None, find_automation_references(
+            catalog, entity_id, limit=limit
+        )
+
+    async def get_automation_traces(
+        self, entity_id: str, *, limit: int
+    ) -> tuple[bool, AutomationTracesPage]:
+        state = await self._rest.get_state(entity_id)
+        item_id = entity_id.partition(".")[2]
+        if state is None or not item_id:
+            return False, normalize_trace_summaries(entity_id, [], limit=limit, supported=True)
+        payload = await self._automations.list_automation_traces(item_id)
+        return True, normalize_trace_summaries(
+            entity_id,
+            payload.traces,
+            limit=limit,
+            supported=payload.supported,
+        )
+
+    async def get_automation_trace(
+        self, entity_id: str, run_id: str
+    ) -> tuple[bool, bool, AutomationTrace | None]:
+        state = await self._rest.get_state(entity_id)
+        item_id = entity_id.partition(".")[2]
+        if state is None or not item_id:
+            return True, False, None
+        payload = await self._automations.get_automation_trace(item_id, run_id)
+        if not payload.supported or not payload.found or payload.trace is None:
+            return payload.supported, False, None
+        return True, True, normalize_automation_trace(entity_id, run_id, payload.trace)
+
+    async def find_activity_cause(
+        self,
+        entity_id: str,
+        *,
+        timestamp: str | None,
+        start: str | None,
+        end: str | None,
+        window_seconds: int,
+        limit: int,
+    ) -> tuple[bool, ActivityCauseReport]:
+        window = self._activity_window(
+            timestamp=timestamp,
+            start=start,
+            end=end,
+            window_seconds=window_seconds,
+        )
+        raw_history, current_state, catalog, raw_traces, contexts = await asyncio.gather(
+            self._rest.get_history(
+                entity_ids=[entity_id],
+                start=window.start_iso,
+                end=window.end_iso,
+                minimal_response=False,
+            ),
+            self._rest.get_state(entity_id),
+            self._automation_catalog(),
+            self._automations.list_automation_traces(None),
+            self._automations.get_automation_trace_contexts(),
+        )
+        transitions = normalize_history_payload(raw_history, window=window).get(entity_id, [])
+        changes = [item for item in transitions if item.began_within_range]
+        references_page = find_automation_references(catalog, entity_id, limit=100)
+        referenced = {item.automation_id for item in references_page.references}
+        trace_rows = [row for row in raw_traces.traces if isinstance(row, Mapping)]
+        full_trace_cache: dict[tuple[str, str], Mapping[str, object] | None] = {}
+        evidence: list[CausalityEvidence] = []
+
+        for change in changes:
+            direct_context = None
+            relationship: Literal["same_context", "parent_context", "none"] = "none"
+            if change.context_id and change.context_id in contexts.contexts:
+                direct_context = contexts.contexts[change.context_id]
+                relationship = "same_context"
+            elif change.context_parent_id and change.context_parent_id in contexts.contexts:
+                direct_context = contexts.contexts[change.context_parent_id]
+                relationship = "parent_context"
+            if direct_context is not None:
+                automation_id = f"automation.{direct_context.get('item_id', '')}"
+                evidence.append(
+                    CausalityEvidence(
+                        source="automation",
+                        relationship="confirmed_by_context",
+                        confidence="confirmed",
+                        event_timestamp=change.timestamp,
+                        automation_id=automation_id,
+                        run_id=direct_context.get("run_id"),
+                        context_relationship=relationship,
+                        supporting_facts=[
+                            "Home Assistant directly links the state-change context to this "
+                            "automation trace."
+                        ],
+                    )
+                )
+                continue
+            if change.origin == "user":
+                evidence.append(
+                    CausalityEvidence(
+                        source="user",
+                        relationship="user_origin",
+                        confidence="confirmed",
+                        event_timestamp=change.timestamp,
+                        supporting_facts=[
+                            "Home Assistant recorded a user context; the user identifier is "
+                            "intentionally omitted."
+                        ],
+                    )
+                )
+                continue
+
+            nearby = _nearby_trace_rows(
+                trace_rows,
+                referenced,
+                change_timestamp=change.timestamp,
+                window_start=window.start,
+                window_end=window.end,
+            )
+            matched_trace = False
+            for automation_id, run_id, _execution_timestamp in nearby[:5]:
+                key = (automation_id, run_id)
+                if key not in full_trace_cache:
+                    payload = await self._automations.get_automation_trace(
+                        automation_id.partition(".")[2], run_id
+                    )
+                    full_trace_cache[key] = payload.trace if payload.found else None
+                raw_trace = full_trace_cache[key]
+                target_timestamp = (
+                    trace_target_execution_timestamp(raw_trace, entity_id)
+                    if raw_trace is not None
+                    else None
+                )
+                timing_aligned = False
+                if target_timestamp is not None:
+                    try:
+                        timing_aligned = (
+                            abs(
+                                (
+                                    parse_timestamp(target_timestamp)
+                                    - parse_timestamp(change.timestamp)
+                                ).total_seconds()
+                            )
+                            <= 10
+                        )
+                    except HomeAssistantQueryError:
+                        timing_aligned = False
+                if timing_aligned:
+                    evidence.append(
+                        CausalityEvidence(
+                            source="automation",
+                            relationship="trace_confirmed",
+                            confidence="confirmed",
+                            event_timestamp=change.timestamp,
+                            execution_timestamp=target_timestamp,
+                            automation_id=automation_id,
+                            run_id=run_id,
+                            supporting_facts=[
+                                "The stored trace records an executed step explicitly targeting "
+                                "the entity.",
+                                "The trace execution falls inside the requested event window.",
+                            ],
+                        )
+                    )
+                    matched_trace = True
+                    break
+            if matched_trace:
+                continue
+            if nearby:
+                automation_id, run_id, execution_timestamp = nearby[0]
+                evidence.append(
+                    CausalityEvidence(
+                        source="automation",
+                        relationship="strong_temporal_match",
+                        confidence="strong",
+                        event_timestamp=change.timestamp,
+                        execution_timestamp=execution_timestamp,
+                        automation_id=automation_id,
+                        run_id=run_id,
+                        supporting_facts=[
+                            "The automation statically references the entity.",
+                            "Its trace started inside the requested event window.",
+                            "No direct Home Assistant context relationship proves causality.",
+                        ],
+                    )
+                )
+                continue
+            if references_page.references:
+                reference = references_page.references[0]
+                evidence.append(
+                    CausalityEvidence(
+                        source="automation",
+                        relationship="possible_reference",
+                        confidence="possible",
+                        event_timestamp=change.timestamp,
+                        automation_id=reference.automation_id,
+                        supporting_facts=[
+                            f"Static configuration contains a {reference.reference_type}.",
+                            "No matching context or trace execution establishes causality.",
+                        ],
+                    )
+                )
+                continue
+            evidence.append(
+                CausalityEvidence(
+                    source="unknown",
+                    relationship="unrelated_or_unknown",
+                    confidence="none",
+                    event_timestamp=change.timestamp,
+                    supporting_facts=["No supported automation causality evidence was found."],
+                )
+            )
+
+        limitations = list(references_page.limitations)
+        if not raw_traces.supported or not contexts.supported:
+            limitations.append("The Home Assistant trace interface is unavailable.")
+        complete = references_page.complete and raw_traces.supported and contexts.supported
+        report = ActivityCauseReport(
+            entity_id=entity_id,
+            start=window.start_iso,
+            end=window.end_iso,
+            state_changes_found=len(changes),
+            evidence=evidence[:limit],
+            total_evidence=len(evidence),
+            returned=min(len(evidence), limit),
+            limit=limit,
+            truncated=len(evidence) > limit,
+            complete=complete,
+            limitations=sorted(set(limitations)),
+        )
+        return current_state is not None or bool(transitions), report
+
     async def refresh_discovery_cache(self) -> None:
         """Explicitly invalidate registry metadata; states are never cached."""
         await self._registry_cache.clear()
+
+    async def refresh_automation_cache(self) -> None:
+        """Invalidate the bounded automation reference index."""
+        await self._automation_cache.clear()
 
     async def _resolver(self) -> DiscoveryResolver:
         snapshot = await self._registry_cache.get(self._registries.get_registries)
@@ -412,6 +741,52 @@ class HomeAssistantClient:
             battery_warning_threshold=self._settings.battery_warning_threshold,
             ignored_entity_ids=self._settings.ignored_diagnostic_entity_ids,
         )
+
+    async def _automation_catalog(self) -> AutomationCatalog:
+        return await self._automation_cache.get(self._load_automation_catalog)
+
+    async def _load_automation_catalog(self) -> AutomationCatalog:
+        states, resolver = await self._states_and_resolver()
+        entity_ids = sorted(
+            entity_id
+            for state in states
+            if (entity_id := _mapping_text(state, "entity_id")) is not None
+            and entity_id.startswith("automation.")
+        )
+        maximum = 500
+        indexed_ids = entity_ids[:maximum]
+        batch = await self._automations.get_automation_configs(indexed_ids)
+        entity_device_ids = {
+            entity_id: device_id
+            for row in resolver.snapshot.entities
+            if (entity_id := _mapping_text(row, "entity_id")) is not None
+            and (device_id := _mapping_text(row, "device_id")) is not None
+        }
+        return AutomationCatalog(
+            supported=batch.supported,
+            configurations=batch.configurations,
+            missing=batch.missing,
+            entity_device_ids=entity_device_ids,
+            truncated=len(entity_ids) > maximum,
+        )
+
+    def _activity_window(
+        self,
+        *,
+        timestamp: str | None,
+        start: str | None,
+        end: str | None,
+        window_seconds: int,
+    ) -> QueryWindow:
+        if timestamp is not None:
+            center = parse_timestamp(timestamp)
+            delta = timedelta(seconds=window_seconds)
+            return self._history_window(
+                start=(center - delta).isoformat(),
+                end=(center + delta).isoformat(),
+                duration_minutes=None,
+            )
+        return self._history_window(start=start, end=end, duration_minutes=None)
 
     def _history_window(
         self, *, start: str | None, end: str | None, duration_minutes: int | None
@@ -448,3 +823,42 @@ def _matches_identifier(value: str, identifier: str | None, name: str | None) ->
         candidate is not None and candidate.casefold().replace("_", " ") == target
         for candidate in candidates
     )
+
+
+def _mapping_text(value: Mapping[str, object], key: str) -> str | None:
+    item = value.get(key)
+    return item if isinstance(item, str) and item else None
+
+
+def _nearby_trace_rows(
+    rows: list[Mapping[str, object]],
+    referenced: set[str],
+    *,
+    change_timestamp: str,
+    window_start: datetime,
+    window_end: datetime,
+) -> list[tuple[str, str, str]]:
+    """Select statically relevant traces inside the already validated window."""
+    change_time = parse_timestamp(change_timestamp)
+    matches: list[tuple[float, str, str, str]] = []
+    for row in rows:
+        item_id = _mapping_text(row, "item_id")
+        run_id = _mapping_text(row, "run_id")
+        timestamp = row.get("timestamp")
+        start = _mapping_text(timestamp, "start") if isinstance(timestamp, Mapping) else None
+        if item_id is None or run_id is None or start is None:
+            continue
+        automation_id = f"automation.{item_id}"
+        if automation_id not in referenced:
+            continue
+        try:
+            trace_time = parse_timestamp(start)
+        except HomeAssistantQueryError:
+            continue
+        if not window_start <= trace_time <= window_end:
+            continue
+        matches.append(
+            (abs((trace_time - change_time).total_seconds()), automation_id, run_id, start)
+        )
+    matches.sort(key=lambda item: (item[0], item[1], item[2]))
+    return [(automation_id, run_id, start) for _, automation_id, run_id, start in matches]

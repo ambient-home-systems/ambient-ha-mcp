@@ -52,8 +52,11 @@ the CI environment and secret permissions have been reviewed.
 
 The integration test exercises only authenticated REST/WebSocket reads: connection,
 discovery, a small entity-history query, a small logbook query, a small
-recent-change query, and all Phase 4 whole-home diagnostic views. It skips cleanly
-when opt-in is absent and never prints the configured URL or token.
+recent-change query, all Phase 4 whole-home diagnostic views, automation listing/
+configuration/reference discovery, and stored trace listing/detail where data is
+available. It skips cleanly when opt-in is absent and never prints the configured
+URL, token, automation content, trace content, or user identifier. It never executes
+an automation or service.
 
 ### Phase 3.5 live-validation status
 
@@ -61,6 +64,10 @@ Phase 3.5 remains blocked solely because `HOME_ASSISTANT_URL` and
 `HOME_ASSISTANT_TOKEN` were unavailable in the validation runtime. Repository,
 unit, protocol, lint, type, and package checks passed, but this is not a claim of
 production validation against a real Home Assistant installation.
+
+Phase 5 live validation is likewise outstanding when those variables are absent.
+Phase 5 configuration and trace enrichment currently requires a Home Assistant
+administrator token; use a dedicated validation account and keep the test opt-in.
 
 ## Discovery implementation notes
 
@@ -99,6 +106,41 @@ production validation against a real Home Assistant installation.
   affected entity is not assumed to meet the requested duration.
 - Array limits default to 25 and are capped at 100. Home-summary details are capped
   at 10 per section and 10 attention items.
+
+## Automation intelligence implementation notes
+
+- Current automation metadata comes from fresh `GET /api/states` reads.
+- Loaded definitions come from Home Assistant Core's read-only, admin-gated
+  `automation/config` WebSocket command.
+- Stored traces come from the read-only, admin-gated `trace/list`, `trace/get`, and
+  `trace/contexts` WebSocket commands. Unknown commands produce feature-local
+  unsupported results.
+- The reference catalog is capped at 500 loaded automations, expires using
+  `REGISTRY_CACHE_TTL_SECONDS`, and can be invalidated with
+  `HomeAssistantClient.refresh_automation_cache()`.
+- Automation results default to 25 and cap at 100; trace lists default to 10 and
+  cap at 50; normalized trace details cap at 200 steps. Nested values cap at eight
+  levels, 100 collection items, and 512-character strings, plus a shared 2,000-value
+  / 20,000-text-character normalization budget per definition or trace.
+- Static template discovery uses exact word-bounded entity IDs. Jinja is never
+  rendered or executed, and any dynamic template makes completeness false.
+- Causality confirmation is intentionally narrow. Direct context/parent linkage
+  confirms a Home Assistant relationship. Trace confirmation additionally requires
+  an executed `action/...` step with an explicit entity target within 10 seconds of
+  the recorded state change. Timing plus a static reference is never confirmed.
+
+Official sources reviewed for this implementation:
+
+- [Home Assistant WebSocket API](https://developers.home-assistant.io/docs/api/websocket/)
+- [Home Assistant context and permissions](https://developers.home-assistant.io/docs/auth_permissions/#the-context-object)
+- [Home Assistant automation configuration command](https://github.com/home-assistant/core/blob/dev/homeassistant/components/automation/__init__.py)
+- [Home Assistant trace WebSocket commands](https://github.com/home-assistant/core/blob/dev/homeassistant/components/trace/websocket_api.py)
+- [Home Assistant trace models](https://github.com/home-assistant/core/blob/dev/homeassistant/components/trace/models.py)
+- [Home Assistant stored-trace configuration](https://www.home-assistant.io/docs/automation/yaml/#number-of-debug-traces-stored)
+
+These source-level WebSocket contracts are version-sensitive. Keep feature
+detection and normalized unsupported results when updating them; do not substitute
+filesystem scraping, `.storage` access, or unsupported write endpoints.
 
 ## Dependency changes
 

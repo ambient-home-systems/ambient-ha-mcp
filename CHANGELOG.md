@@ -6,6 +6,30 @@ on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-25
+
+### Added
+
+- Read-only automation listing, bounded normalized configuration, static entity
+  reference discovery, stored trace listing/detail, and activity-cause evidence tools.
+- Feature-detected support for Home Assistant `automation/config`, `trace/list`,
+  `trace/get`, and `trace/contexts` WebSocket commands.
+- TTL-cached, manually refreshable, 500-automation reference index with conservative
+  explicit entity, device, and inert template-text matching.
+- Strict causality categories separating direct context proof and executed action
+  evidence from temporal correlation and possible static references.
+- Large-inventory, adversarial prompt-injection, secret-redaction, nested-trace,
+  failure, unsupported-interface, and context-correlation tests.
+
+### Security
+
+- Automation content is treated as untrusted data, never executed as Jinja or
+  interpreted as server instructions.
+- Webhooks, URLs, tokens, credentials, notification targets/messages, and shell
+  commands are redacted from normalized configuration and trace output.
+- Home Assistant user identifiers are reduced to the privacy-preserving origin
+  category `user` and never returned.
+
 ## [0.4.0] - 2026-08-25
 
 ### Added

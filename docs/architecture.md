@@ -50,7 +50,8 @@ Is the semantic facade used by application services. It coordinates:
 
 - REST for fresh current-state snapshots and selected safe metadata;
 - REST for official Recorder history and logbook reads; and
-- WebSocket for entity, device, area, and floor registry snapshots; and
+- WebSocket for entity, device, area, and floor registry snapshots;
+- WebSocket for loaded automation configuration and stored automation traces; and
 - Home Assistant MCP/Assist only where its semantics are useful.
 
 No MCP tool should depend directly on `httpx`, WebSocket command types, or a raw
@@ -124,6 +125,63 @@ Whole-home responses contain counts and bounded evidence. Only supported section
 are emitted. Diagnostic findings are deterministic data with an exact category,
 severity, cautious message, and state/device-class evidence; explanatory reasoning
 remains the MCP client's responsibility.
+
+## Automation intelligence flow
+
+Phase 5 uses only authenticated, read-only Home Assistant interfaces:
+
+- fresh `automation.*` states from `GET /api/states` supply enabled state,
+  friendly name, last-triggered time, and mode;
+- the admin-gated WebSocket `automation/config` command supplies each loaded
+  automation's in-memory raw configuration;
+- the admin-gated WebSocket `trace/list`, `trace/get`, and `trace/contexts`
+  commands supply stored trace metadata, one requested trace body, and the
+  context-to-trace lookup used for correlation; and
+- the existing Recorder history path supplies state changes and opaque context
+  IDs. Phase 5 does not create a parallel history implementation.
+
+The exact WebSocket command contracts are version-sensitive Home Assistant Core
+interfaces. Ambient feature-detects `unknown_command`, represents unsupported
+features structurally, and does not let trace/configuration absence collapse
+entity discovery or history. Configuration covers loaded automations, including
+UI-managed entries, without assuming `automations.yaml`, reading `.storage`, or
+accessing the Home Assistant filesystem.
+
+An in-memory TTL catalog fetches loaded configurations in one bounded WebSocket
+session and builds conservative static references. It is limited to 500 loaded
+automations, expires with the registry-cache TTL, can be explicitly refreshed,
+and is never persisted. Current automation states and traces are not stored in
+that cache.
+
+Trace normalization preserves Home Assistant path strings and recorded bucket
+order, including nested `choose`, `if`, `parallel`, and sequence paths. It returns
+at most 200 normalized steps. Configuration and trace values are recursively
+bounded to eight levels, 100 items per collection, and 512 characters per string,
+with a shared 2,000-value / 20,000-text-character normalization budget per result.
+
+### Causality rules
+
+`ha_find_activity_cause` gathers evidence; it does not generate a narrative.
+The exact categories are:
+
+- `confirmed_by_context`: the Recorder state-change context ID equals a stored
+  automation trace context ID, or its parent context ID directly equals that
+  trace context ID.
+- `trace_confirmed`: a stored trace has an executed `action/...` step whose
+  result contains an explicit `entity_id` target, and that action timestamp is
+  within 10 seconds of the recorded state change.
+- `strong_temporal_match`: a statically referencing automation has a trace inside
+  the requested window, but neither direct context linkage nor the strict
+  executed-target timing rule is present.
+- `possible_reference`: static configuration references the entity, with no
+  matching execution evidence.
+- `user_origin`: Recorder included a user ID in the state context; Ambient emits
+  only the origin category, never the identifier.
+- `unrelated_or_unknown`: no supported automation evidence was found.
+
+Only the first two automation categories carry `confidence: confirmed`. Timestamp
+proximity and static references never do. Even confirmed evidence states what
+Home Assistant recorded; it is not free-form proof about physical reality.
 
 ## Health semantics
 

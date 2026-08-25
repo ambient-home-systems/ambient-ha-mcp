@@ -16,6 +16,7 @@ class StateTransition(StrictModel):
     attributes: dict[str, JsonValue] = Field(default_factory=dict)
     context_id: str | None = None
     context_parent_id: str | None = None
+    origin: str = "unknown"
     began_within_range: bool
     duration_seconds: int | None = None
     duration_complete: bool = False
@@ -72,6 +73,7 @@ class RecentChange(StrictModel):
     floor_name: str | None = None
     context_id: str | None = None
     context_parent_id: str | None = None
+    origin: str = "unknown"
 
 
 class RecentChangesFilters(StrictModel):
