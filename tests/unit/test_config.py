@@ -22,6 +22,7 @@ def test_required_configuration_and_defaults() -> None:
     assert settings.history_max_entities == 50
     assert settings.battery_warning_threshold == 20
     assert settings.ignored_diagnostic_entity_ids == frozenset()
+    assert settings.policy_file is None
 
 
 @pytest.mark.parametrize("ttl", [4, 3601])

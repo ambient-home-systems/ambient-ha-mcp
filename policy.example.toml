@@ -1,0 +1,55 @@
+# Phase 6 remains non-executable even if this is false. Keep both this value and
+# READ_ONLY=true until a later, separately reviewed execution phase exists.
+read_only = true
+global_default = "deny"
+
+[operation_rules]
+read = "allow"
+normal_control = "deny"
+climate_control = "deny"
+sensitive_control = "deny"
+scene_execution = "confirm_required"
+script_execution = "deny"
+administrative = "deny"
+
+[domain_rules]
+light = "allow"
+fan = "allow"
+media_player = "allow"
+climate = "allow"
+switch = "deny"
+cover = "confirm_required"
+lock = "deny"
+alarm_control_panel = "deny"
+valve = "deny"
+scene = "confirm_required"
+script = "deny"
+automation = "deny"
+
+# Exact canonical IDs only. These examples are comments so a fresh installation
+# never assumes that a target exists or is safe.
+[entity_rules]
+# "switch.desk_lamp" = "allow"
+
+[protected_entities]
+# "lock.front_door" = "deny"
+# "cover.main_garage" = "deny"
+# "switch.sump_pump" = "deny"
+
+[limits]
+max_entities_per_action = 20
+max_operations_per_request = 10
+
+[values]
+climate_min_celsius = 7
+climate_max_celsius = 30
+climate_min_fahrenheit = 45
+climate_max_fahrenheit = 86
+allowed_hvac_modes = ["off", "heat", "cool", "auto", "dry", "fan_only"]
+max_media_volume = 0.75
+min_brightness_percent = 0
+max_brightness_percent = 100
+min_color_temperature_kelvin = 1500
+max_color_temperature_kelvin = 10000
+min_fan_percentage = 0
+max_fan_percentage = 100

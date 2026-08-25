@@ -40,9 +40,27 @@ narrowly scoped controls. A generic `call_ha_api` or
 ### Policy engine
 
 Makes authorization decisions on the server, independently of any MCP-host
-confirmation UI. The current engine allows `read` and denies normal control, sensitive
-control, and administrative operations. Later decisions can include identity,
-entity/domain allowlists, location/area rules, time constraints, and audit data.
+confirmation UI and independently of the Home Assistant credential's upstream
+privilege. Phase 6 models `allow`, `deny`, and `confirm_required`; canonical
+resolved targets; protected-entity, entity, domain, operation, and global rules;
+typed value bounds; mass-action limits; confirmation requirements; dry-run plans;
+and redacted audit events. There is still no action executor or write-capable
+client method.
+
+Exact precedence is:
+
+1. hard `READ_ONLY` boundary;
+2. hard administrative prohibition;
+3. protected entity;
+4. explicit entity rule;
+5. domain rule;
+6. operation-class rule; and
+7. global default.
+
+Policy never consumes friendly names, aliases, template text, trace messages, or
+other Home Assistant natural-language data. Area and floor IDs are carried as
+canonical planning metadata, but area/floor authorization rules are deferred until
+they can be integrated without fragile display-name matching.
 
 ### HomeAssistantClient
 
@@ -194,6 +212,36 @@ Home Assistant recorded; it is not free-form proof about physical reality.
 HTTP 200 means the bridge process is live. `status: degraded` means Home Assistant
 readiness is impaired. Docker therefore does not restart a healthy bridge merely
 because Home Assistant is restarting or temporarily offline.
+
+## Future write authorization flow
+
+Phase 6 establishes—but does not activate—the following flow:
+
+```mermaid
+flowchart TD
+    Tool[MCP semantic tool] --> Resolve[Semantic target resolution]
+    Resolve --> Canonical[Canonical entity IDs]
+    Canonical --> Capability[Capability validation]
+    Capability --> Policy[Server-side policy engine]
+    Policy --> Confirm[Server-verifiable confirmation]
+    Confirm -. not implemented .-> Executor[Central action executor]
+    Executor -. not implemented .-> Client[HomeAssistantClient]
+    Client -. no write adapter .-> HA[Home Assistant API]
+```
+
+Authorization occurs only after resolution. A phrase such as “garage lights” is
+never authorized and then expanded later. Ambiguous resolution yields a modeled
+clarification requirement. A mixed-target plan explicitly separates allowed,
+denied, and confirmation targets; any denial makes the overall plan deny so a
+future executor cannot silently perform only a subset.
+
+The internal `ActionPlanner` enforces target and operation limits before evaluating
+individual rules, rejects unknown capabilities, applies value constraints without
+clamping, sanitizes predicted service data, and always returns
+`execution_available: false` / `executable: false`. Confirmation is represented as
+an unverified server-challenge requirement; Phase 6 accepts no `confirmed=true`
+input. `AuditEvent` and `AuditSink` provide a bounded, redacted structured-log seam
+without adding persistent storage.
 
 ## Planned extension rules
 
