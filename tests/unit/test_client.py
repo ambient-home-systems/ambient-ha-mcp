@@ -6,8 +6,10 @@ from ambient_ha.ha.client import HomeAssistantClient
 from ambient_ha.ha.websocket import RegistrySnapshot
 from ambient_ha.models.discovery import EntitySearchFilters
 from ambient_ha.models.history import RecentChangesFilters
+from ambient_ha.models.home import LowBatteryFilters
 from tests.fixtures.discovery import REGISTRIES, STATES
 from tests.fixtures.history import HISTORY_PAYLOAD, LOGBOOK_PAYLOAD
+from tests.fixtures.home import HOME_REGISTRIES, HOME_STATES
 
 
 class FakeRegistryProvider:
@@ -214,3 +216,54 @@ async def test_recent_changes_rejects_too_many_candidates(settings: Settings) ->
         )
 
     assert captured.value.code == "too_many_candidate_entities"
+
+
+@pytest.mark.anyio
+async def test_whole_home_analysis_uses_one_bulk_state_read_and_one_registry_snapshot(
+    settings: Settings,
+) -> None:
+    state_reads = 0
+    large_states = [
+        {
+            "entity_id": f"sensor.generated_{index:04d}",
+            "state": str(index),
+            "attributes": {"friendly_name": f"Generated {index}"},
+            "last_changed": "2026-08-25T12:00:00+00:00",
+        }
+        for index in range(1000)
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal state_reads
+        assert request.url.path == "/api/states"
+        state_reads += 1
+        return httpx.Response(200, json=[*HOME_STATES, *large_states], request=request)
+
+    provider = FakeRegistryProvider(HOME_REGISTRIES)
+    client = HomeAssistantClient(
+        settings,
+        transport=httpx.MockTransport(handler),
+        registry_provider=provider,
+    )
+    summary = await client.get_home_summary()
+
+    assert state_reads == 1
+    assert provider.calls == 1
+    assert summary.total_entities == len(HOME_STATES) + 1000
+    assert len(summary.model_dump_json()) < 20000
+
+
+@pytest.mark.anyio
+async def test_client_low_battery_classification_uses_sanitized_bulk_inventory(
+    settings: Settings,
+) -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, json=HOME_STATES, request=request)
+    )
+    page = await HomeAssistantClient(
+        settings,
+        transport=transport,
+        registry_provider=FakeRegistryProvider(HOME_REGISTRIES),
+    ).find_low_batteries(LowBatteryFilters(threshold=20))
+
+    assert [entity.entity_id for entity in page.entities] == ["sensor.front_lock_battery"]

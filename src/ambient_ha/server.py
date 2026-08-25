@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from mcp.server import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
@@ -22,6 +24,14 @@ from ambient_ha.models.discovery import (
     FloorResult,
 )
 from ambient_ha.models.history import EntityHistoryResult, LogbookResult, RecentChangesResult
+from ambient_ha.models.home import (
+    HomeDiagnosticsResult,
+    HomeSummaryResult,
+    LightsOnResult,
+    LowBatteriesResult,
+    OpeningsResult,
+    UnavailableEntitiesResult,
+)
 from ambient_ha.tools.diagnostics import connection_status, health_status, server_info
 from ambient_ha.tools.discovery import (
     domain_summary as domain_summary_tool,
@@ -53,6 +63,24 @@ from ambient_ha.tools.history import (
 from ambient_ha.tools.history import (
     get_recent_changes as get_recent_changes_tool,
 )
+from ambient_ha.tools.home import (
+    diagnose_home as diagnose_home_tool,
+)
+from ambient_ha.tools.home import (
+    find_low_batteries as find_low_batteries_tool,
+)
+from ambient_ha.tools.home import (
+    find_unavailable_entities as find_unavailable_entities_tool,
+)
+from ambient_ha.tools.home import (
+    get_home_summary as get_home_summary_tool,
+)
+from ambient_ha.tools.home import (
+    get_lights_on as get_lights_on_tool,
+)
+from ambient_ha.tools.home import (
+    get_openings as get_openings_tool,
+)
 
 
 def build_mcp_server(
@@ -67,8 +95,10 @@ def build_mcp_server(
         instructions=(
             "Use these read-only tools to inspect Home Assistant connectivity, entities, "
             "areas, floors, current state, and recorded historical facts. Prefer search when a "
-            "user gives a human name instead of an entity ID. Historical tools report recorded "
-            "facts, not why an event happened. No tool changes Home Assistant."
+            "user gives a human name instead of an entity ID. Whole-home tools classify current "
+            "facts deterministically; safety findings report sensor states, not real-world proof. "
+            "Historical tools report recorded facts, not why an event happened. No tool changes "
+            "Home Assistant."
         ),
     )
 
@@ -190,6 +220,113 @@ def build_mcp_server(
     )
     async def ha_domain_summary(domain: str) -> DomainSummaryResult:
         return await domain_summary_tool(ha_client, domain)
+
+    @server.tool(
+        description=(
+            "Return a compact whole-home snapshot for questions such as whether everything looks "
+            "okay or what currently needs attention. The server uses one bulk current-state read "
+            "plus cached registry metadata, includes only supported sections, bounds every detail "
+            "list, and never returns GPS coordinates or raw device-tracker attributes. Read-only."
+        )
+    )
+    async def ha_get_home_summary() -> HomeSummaryResult:
+        return await get_home_summary_tool(ha_client)
+
+    @server.tool(
+        description=(
+            "Find entities currently reporting unavailable, optionally scoped by domain, area, "
+            "floor, or a minimum current-state duration in minutes. Unknown states are counted "
+            "separately. Duration filtering uses valid last_changed evidence and explicitly marks "
+            "incomplete evidence instead of estimating. Results are bounded and read-only."
+        )
+    )
+    async def ha_find_unavailable_entities(
+        domain: str | None = None,
+        area: str | None = None,
+        floor: str | None = None,
+        minimum_duration: int | None = None,
+        limit: int = 25,
+    ) -> UnavailableEntitiesResult:
+        return await find_unavailable_entities_tool(
+            ha_client,
+            domain=domain,
+            area=area,
+            floor=floor,
+            minimum_duration=minimum_duration,
+            limit=limit,
+        )
+
+    @server.tool(
+        description=(
+            "Find genuine numeric percentage battery sensors at or below a threshold, optionally "
+            "scoped by area or floor. The default threshold is configured by the server. Charging "
+            "states, battery binary sensors, and voltage measurements are deliberately excluded. "
+            "Results are compact, bounded, and read-only."
+        )
+    )
+    async def ha_find_low_batteries(
+        threshold: int | None = None,
+        area: str | None = None,
+        floor: str | None = None,
+        limit: int = 25,
+    ) -> LowBatteriesResult:
+        return await find_low_batteries_tool(
+            ha_client,
+            default_threshold=settings.battery_warning_threshold,
+            threshold=threshold,
+            area=area,
+            floor=floor,
+            limit=limit,
+        )
+
+    @server.tool(
+        description=(
+            "List Home Assistant doors, windows, garage doors, and other opening-class entities. "
+            "Filter by area, floor, opening type, or normalized state (open, closed, unavailable, "
+            "unknown, or any). Device-class semantics take priority over conservative name "
+            "fallbacks. This reads current facts and cannot operate an opening."
+        )
+    )
+    async def ha_get_openings(
+        area: str | None = None,
+        floor: str | None = None,
+        opening_type: Literal["door", "window", "garage_door", "opening"] | None = None,
+        state: Literal["open", "closed", "unavailable", "unknown", "any"] = "open",
+        limit: int = 25,
+    ) -> OpeningsResult:
+        return await get_openings_tool(
+            ha_client,
+            area=area,
+            floor=floor,
+            opening_type=opening_type,
+            state=state,
+            limit=limit,
+        )
+
+    @server.tool(
+        description=(
+            "Return current light entities reporting state on, optionally scoped by area or floor. "
+            "Results include compact location and brightness evidence, are bounded, and expose no "
+            "control or service-call capability."
+        )
+    )
+    async def ha_get_lights_on(
+        area: str | None = None,
+        floor: str | None = None,
+        limit: int = 25,
+    ) -> LightsOnResult:
+        return await get_lights_on_tool(ha_client, area=area, floor=floor, limit=limit)
+
+    @server.tool(
+        description=(
+            "Return bounded deterministic findings from one current whole-home snapshot. Exact "
+            "severity rules are server-defined and every finding includes state/device-class "
+            "evidence. Safety findings mean Home Assistant reports a sensor active; they do not "
+            "prove a real-world emergency and trigger no external action. Completely read-only."
+        )
+    )
+    async def ha_diagnose_home(limit: int = 25) -> HomeDiagnosticsResult:
+        return await diagnose_home_tool(ha_client, limit=limit)
 
     @server.tool(
         description=(

@@ -113,6 +113,77 @@ area, floor, domain, and exact entity-ID filters. All filters compose. The bridg
 resolves the current candidate entities once and makes a single bulk recorder
 history request; it returns chronological state facts, not explanations.
 
+## Whole-home summaries and diagnostics
+
+These tools classify one fresh bulk state snapshot joined to cached registry
+metadata. They do not make serial per-entity requests, embed an LLM, expose raw
+tracker attributes, or change Home Assistant. List limits default to 25 and are
+capped at 100; whole-home section details and attention items are capped at 10.
+
+Classification uses Home Assistant domain, `device_class`, state, unit, and
+capabilities before names. A conservative word-boundary name fallback applies only
+to otherwise unclassified binary-sensor or cover openings. Unsupported sections
+are omitted rather than fabricated.
+
+### `ha_get_home_summary()`
+
+Returns a compact whole-home snapshot with total availability counts and only the
+supported sections among occupancy, openings, lighting, climate, environment,
+device health, safety, and energy. Sections use counts plus bounded factual details.
+`attention_items` is deterministic and explicitly reports truncation.
+
+### `ha_find_unavailable_entities(domain?, area?, floor?, minimum_duration?, limit?)`
+
+Returns entities whose current state is exactly `unavailable`; unknown states are
+counted separately. `minimum_duration` is minutes and uses the current state's
+timezone-aware `last_changed`. If that evidence is missing or invalid, the entity
+is not assumed to meet the duration and the page reports incomplete evidence. No
+Recorder result is invented.
+
+### `ha_find_low_batteries(threshold?, area?, floor?, limit?)`
+
+Returns only `sensor` entities with device class `battery`, unit `%`, and a numeric
+state from 0 through 100 at or below the threshold. The configured default is 20%.
+Charging-state sensors, battery binary sensors, voltage sensors, and name-only
+matches are excluded.
+
+### `ha_get_openings(area?, floor?, opening_type?, state?, limit?)`
+
+Classifies doors, windows, garage doors, and other openings. `opening_type` accepts
+`door`, `window`, `garage_door`, or `opening`; normalized `state` accepts `open`,
+`closed`, `unavailable`, `unknown`, or `any` and defaults to `open`. Cover states
+`opening` and `closing` remain physically non-closed and normalize to `open`.
+
+### `ha_get_lights_on(area?, floor?, limit?)`
+
+Returns compact light entities whose current state is exactly `on`, including
+resolved location and safe brightness when present. It has no control capability.
+
+### `ha_diagnose_home(limit?)`
+
+Returns deterministic findings with a category, severity, cautious message, and
+the Home Assistant state/device-class evidence used. Exact severity rules are:
+
+| Severity | Categories |
+| --- | --- |
+| `critical` | Active smoke or carbon-monoxide sensor reports |
+| `warning` | Unavailable entity, low percentage battery, open garage, active moisture/problem sensor, disconnected connectivity sensor |
+| `info` | Unknown entity state, open door, open window, or other open opening |
+
+For binary sensors, smoke, carbon monoxide, moisture, and problem are active when
+state is `on`; connectivity is a problem when state is `off`. A finding says only
+what Home Assistant reports. It does not prove a physical emergency, explain why a
+state occurred, contact emergency services, or trigger an automation.
+
+`BATTERY_WARNING_THRESHOLD` configures the default battery threshold.
+`IGNORED_DIAGNOSTIC_ENTITIES` can exclude a small comma-separated set of entity IDs
+from all aggregate Phase 4 views without creating a policy/configuration DSL.
+
+Limitations: entity semantics depend on correct Home Assistant device classes;
+ignored or disabled entities are not present in the state inventory; and current
+`last_changed` evidence may be missing. Classification intentionally prefers an
+omission over an aggressive guess.
+
 ## Design rules
 
 New tools must describe a recognizable user goal, expose the smallest useful

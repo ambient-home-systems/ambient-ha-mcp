@@ -4,9 +4,11 @@ Ambient Home Assistant MCP is a secure, semantic bridge that gives ChatGPT and
 other MCP clients purpose-built access to Home Assistant. It is the server
 foundation for the future user-facing **Ambient Home Assistant** application.
 
-> **Phase 3 status:** local/private and read-only. This release adds recorded
-> state history, logbook facts, and recent-change queries. It cannot control
-> devices or change Home Assistant.
+> **Phase 4 status:** local/private and read-only. This release adds compact
+> whole-home summaries and deterministic diagnostics. It cannot control devices
+> or change Home Assistant. Phase 3.5 live validation remains blocked solely
+> because the required Home Assistant URL and token were unavailable; no
+> production-validation claim is made.
 
 ## What it is—and what it is not
 
@@ -55,6 +57,12 @@ See [the architecture decision record](docs/architecture.md).
 | `ha_get_entity_history` | Returns bounded recorded state transitions and only proven state durations. |
 | `ha_get_logbook` | Returns bounded, privacy-filtered recorded logbook facts. |
 | `ha_get_recent_changes` | Finds recorded state changes by time, area, floor, domain, or entity. |
+| `ha_get_home_summary` | Returns a bounded whole-home snapshot containing only supported sections. |
+| `ha_find_unavailable_entities` | Finds unavailable entities with optional factual duration filtering. |
+| `ha_find_low_batteries` | Finds genuine numeric percentage battery sensors below a threshold. |
+| `ha_get_openings` | Lists doors, windows, garage doors, and other openings by semantic class. |
+| `ha_get_lights_on` | Lists compact current light entities reporting `on`. |
+| `ha_diagnose_home` | Returns deterministic, evidence-backed findings with exact severities. |
 | `GET /health` | Reports application liveness and separate Home Assistant readiness. |
 
 No service calls, state changes, or administrative endpoints are implemented.
@@ -73,6 +81,9 @@ No service calls, state changes, or administrative endpoints are implemented.
 - Historical queries use Home Assistant Recorder data, remain uncached, and are
   bounded to a 24-hour default / 7-day maximum window, 500 events, and 50
   aggregate candidate entities by default.
+- Whole-home tools use one bulk current-state request plus the registry cache.
+  Detail lists are bounded, raw tracker attributes are excluded, and safety text
+  states only what Home Assistant reports.
 - MCP transport Host and Origin allowlists protect against DNS rebinding.
 - The policy engine allows reads and fails closed for every control class.
 - The container runs as a non-root user with a read-only filesystem in Compose.

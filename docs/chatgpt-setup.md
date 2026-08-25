@@ -53,4 +53,7 @@ plugins use reviewed metadata snapshots and have a separate update process.
 - "Summarize the current states in the cover domain."
 - "Show the recorded changes for the kitchen lights during the last hour."
 - "What does the logbook say about light.kitchen_ceiling since 09:00Z?"
+- "Give me a quick whole-home status without listing every entity."
+- "Are any batteries low, doors open, or devices unavailable?"
+- "Report deterministic home findings and show the sensor evidence."
 - "Turn off the kitchen lights." (Expected: no matching control tool.)

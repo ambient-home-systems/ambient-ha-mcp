@@ -5,6 +5,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from ambient_ha.config import Settings
 from ambient_ha.ha.discovery import DiscoveryResolver
+from ambient_ha.ha.home import HomeAnalyzer
 from ambient_ha.models import ConnectionStatus, HomeAssistantServerInfo
 from ambient_ha.models.discovery import EntitySearchFilters
 from ambient_ha.models.history import (
@@ -13,12 +14,23 @@ from ambient_ha.models.history import (
     RecentChangesFilters,
     RecentChangesPage,
 )
+from ambient_ha.models.home import (
+    LocationFilters,
+    LowBatteryFilters,
+    OpeningFilters,
+    UnavailableEntityFilters,
+)
 from ambient_ha.server import build_mcp_server
 from tests.fixtures.discovery import REGISTRIES, STATES
+from tests.fixtures.home import HOME_REGISTRIES, HOME_STATES
 
 
 class FakeGateway:
     resolver = DiscoveryResolver(REGISTRIES)
+    home_analyzer = HomeAnalyzer(
+        DiscoveryResolver(HOME_REGISTRIES).entities(HOME_STATES, include_attributes=True),
+        battery_warning_threshold=20,
+    )
 
     async def check_connection(self) -> ConnectionStatus:
         return ConnectionStatus(
@@ -86,6 +98,24 @@ class FakeGateway:
             limit=filters.limit or 100,
             truncated=False,
         )
+
+    async def get_home_summary(self):
+        return self.home_analyzer.home_summary()
+
+    async def find_unavailable_entities(self, filters: UnavailableEntityFilters):
+        return self.home_analyzer.unavailable_entities(filters)
+
+    async def find_low_batteries(self, filters: LowBatteryFilters):
+        return self.home_analyzer.low_batteries(filters)
+
+    async def get_openings(self, filters: OpeningFilters):
+        return self.home_analyzer.openings(filters)
+
+    async def get_lights_on(self, filters: LocationFilters):
+        return self.home_analyzer.lights_on(filters)
+
+    async def diagnose_home(self, *, limit: int):
+        return self.home_analyzer.diagnose(limit=limit)
 
 
 @pytest.mark.anyio
@@ -181,3 +211,34 @@ async def test_mcp_history_tools_are_registered_and_callable(settings: Settings)
     assert history.structured_content["found"] is True
     assert logbook.structured_content["logbook"]["returned"] == 0
     assert changes.structured_content["changes"]["candidate_entities"] == 0
+
+
+@pytest.mark.anyio
+async def test_mcp_home_diagnostic_tools_are_registered_and_callable(settings: Settings) -> None:
+    server = build_mcp_server(settings, client=FakeGateway())
+
+    async with Client(server) as client:
+        listed = await client.list_tools()
+        summary = await client.call_tool("ha_get_home_summary", {})
+        unavailable = await client.call_tool("ha_find_unavailable_entities", {"limit": 2})
+        batteries = await client.call_tool("ha_find_low_batteries", {})
+        openings = await client.call_tool("ha_get_openings", {"state": "open"})
+        lights = await client.call_tool("ha_get_lights_on", {})
+        diagnostics = await client.call_tool("ha_diagnose_home", {"limit": 3})
+
+    names = {tool.name for tool in listed.tools}
+    assert {
+        "ha_get_home_summary",
+        "ha_find_unavailable_entities",
+        "ha_find_low_batteries",
+        "ha_get_openings",
+        "ha_get_lights_on",
+        "ha_diagnose_home",
+    } <= names
+    assert len(names) == 18
+    assert summary.structured_content["summary"]["total_entities"] == len(HOME_STATES)
+    assert unavailable.structured_content["result"]["total_matches"] == 1
+    assert batteries.structured_content["result"]["total_matches"] == 1
+    assert openings.structured_content["result"]["total_matches"] == 4
+    assert lights.structured_content["result"]["total_matches"] == 1
+    assert diagnostics.structured_content["report"]["returned"] == 3

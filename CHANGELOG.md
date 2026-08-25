@@ -6,6 +6,25 @@ on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-25
+
+### Added
+
+- Compact whole-home summary across only the semantic sections supported by the
+  current Home Assistant inventory.
+- Bounded tools for unavailable entities, genuine percentage batteries, openings,
+  and lights reporting on.
+- Deterministic evidence-backed diagnostics with documented critical, warning, and
+  informational severity rules.
+- Large-inventory and response-size tests proving one bulk state read per tool and
+  bounded output.
+
+### Security
+
+- Presence is summarized without raw tracker attributes or GPS coordinates.
+- Safety messages state what Home Assistant reports without claiming that a sensor
+  state proves a real-world emergency.
+
 ## [0.3.0] - 2026-08-25
 
 ### Added

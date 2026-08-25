@@ -33,8 +33,8 @@ installation data.
 
 Represent user goals such as diagnosing connectivity, resolving an entity,
 searching a home's semantic inventory, reading recorded facts, and summarizing
-areas or floors. Later tools should follow the same pattern: `get_home_summary`,
-and narrowly scoped controls. A generic `call_ha_api` or
+areas, floors, or the whole home. Later tools should follow the same pattern for
+narrowly scoped controls. A generic `call_ha_api` or
 `call_service` tool is explicitly outside the architecture.
 
 ### Policy engine
@@ -106,6 +106,24 @@ and the next recorded boundary are inside the requested window.
 The normalizer preserves opaque state/logbook context IDs and parent IDs for a
 future causality layer, but Phase 3 neither resolves them nor explains why an event
 happened. Context user identifiers are not returned.
+
+## Whole-home diagnostic flow
+
+Phase 4 tools each perform one bulk `GET /api/states` request and reuse the same
+cached registry snapshot as discovery. `DiscoveryResolver` creates one normalized
+inventory with sanitized attributes; the pure `HomeAnalyzer` then classifies and
+aggregates it without additional network calls. No entity-by-entity request loop
+is used.
+
+Classification prioritizes Home Assistant domain, `device_class`, state, unit, and
+capabilities. Conservative entity/friendly-name fallbacks are used only for
+unclassified binary-sensor or cover openings. Battery findings require a `sensor`
+with device class `battery`, unit `%`, and a numeric state between 0 and 100.
+
+Whole-home responses contain counts and bounded evidence. Only supported sections
+are emitted. Diagnostic findings are deterministic data with an exact category,
+severity, cautious message, and state/device-class evidence; explanatory reasoning
+remains the MCP client's responsibility.
 
 ## Health semantics
 

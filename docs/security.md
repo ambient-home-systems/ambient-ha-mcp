@@ -53,6 +53,15 @@ credential-like material are redacted. Historical data is never cached. Query
 bounds limit default retention reads to 24 hours, at most 7 days, 500 returned
 records, and 50 aggregate candidate entities by default.
 
+Whole-home diagnostics operate on the same normalized inventory. Presence can be
+counted or represented by a compact entity state, but raw `device_tracker`
+attributes, latitude, longitude, GPS accuracy, and routes are never returned.
+Summary details default to 10 items and diagnostic/list tools are capped at 100.
+
+Safety findings are sensor-state reports, not declarations about physical reality.
+The server never claims that an active smoke, carbon-monoxide, moisture, or problem
+sensor proves an emergency, and it cannot contact emergency services.
+
 ## Logs
 
 Application logs are structured JSON with timestamp, level, logger, message, and
