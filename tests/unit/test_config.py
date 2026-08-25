@@ -20,6 +20,8 @@ def test_required_configuration_and_defaults() -> None:
     assert settings.history_default_limit == 100
     assert settings.history_max_events == 500
     assert settings.history_max_entities == 50
+    assert settings.battery_warning_threshold == 20
+    assert settings.ignored_diagnostic_entity_ids == frozenset()
 
 
 @pytest.mark.parametrize("ttl", [4, 3601])
@@ -95,3 +97,22 @@ def test_allowlists_are_parsed_without_empty_entries() -> None:
 
     assert settings.allowed_hosts == ["localhost", "mcp.example.test"]
     assert settings.allowed_origins == ["https://chat.example.test"]
+
+
+def test_diagnostic_configuration_is_bounded_and_normalized() -> None:
+    settings = Settings(
+        HOME_ASSISTANT_URL="http://homeassistant.local:8123",
+        HOME_ASSISTANT_TOKEN="secret",
+        BATTERY_WARNING_THRESHOLD=15,
+        IGNORED_DIAGNOSTIC_ENTITIES="sensor.One, binary_sensor.Two,",
+    )
+
+    assert settings.battery_warning_threshold == 15
+    assert settings.ignored_diagnostic_entity_ids == frozenset({"sensor.one", "binary_sensor.two"})
+
+    with pytest.raises(ValidationError):
+        Settings(
+            HOME_ASSISTANT_URL="http://homeassistant.local:8123",
+            HOME_ASSISTANT_TOKEN="secret",
+            BATTERY_WARNING_THRESHOLD=0,
+        )

@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     history_default_limit: int = Field(default=100, ge=1, le=500, alias="HISTORY_DEFAULT_LIMIT")
     history_max_events: int = Field(default=500, ge=1, le=1000, alias="HISTORY_MAX_EVENTS")
     history_max_entities: int = Field(default=50, ge=1, le=100, alias="HISTORY_MAX_ENTITIES")
+    battery_warning_threshold: int = Field(
+        default=20, ge=1, le=100, alias="BATTERY_WARNING_THRESHOLD"
+    )
+    ignored_diagnostic_entities: str = Field(default="", alias="IGNORED_DIAGNOSTIC_ENTITIES")
     read_only: bool = Field(default=True, alias="READ_ONLY")
 
     @field_validator("home_assistant_url")
@@ -87,6 +91,15 @@ class Settings(BaseSettings):
     def allowed_origins(self) -> list[str]:
         """Return the explicit MCP browser-origin allowlist."""
         return [item.strip() for item in self.mcp_allowed_origins.split(",") if item.strip()]
+
+    @property
+    def ignored_diagnostic_entity_ids(self) -> frozenset[str]:
+        """Return normalized entity IDs excluded from aggregate diagnostic views."""
+        return frozenset(
+            item.strip().casefold()
+            for item in self.ignored_diagnostic_entities.split(",")
+            if item.strip()
+        )
 
 
 @lru_cache(maxsize=1)

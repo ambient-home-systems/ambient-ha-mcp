@@ -24,6 +24,7 @@ from ambient_ha.ha.history import (
     normalize_logbook_payload,
     resolve_query_window,
 )
+from ambient_ha.ha.home import HomeAnalyzer
 from ambient_ha.ha.normalize import normalize_server_info
 from ambient_ha.ha.rest import HomeAssistantRestAPI
 from ambient_ha.ha.websocket import (
@@ -47,6 +48,18 @@ from ambient_ha.models.history import (
     LogbookPage,
     RecentChangesFilters,
     RecentChangesPage,
+)
+from ambient_ha.models.home import (
+    HomeDiagnosticsReport,
+    HomeSummary,
+    LightsOnPage,
+    LocationFilters,
+    LowBatteriesPage,
+    LowBatteryFilters,
+    OpeningFilters,
+    OpeningsPage,
+    UnavailableEntitiesPage,
+    UnavailableEntityFilters,
 )
 from ambient_ha.models.home_assistant import HomeAssistantServerInfo
 
@@ -117,6 +130,32 @@ class HomeAssistantGateway(Protocol):
 
     async def get_recent_changes(self, filters: RecentChangesFilters) -> RecentChangesPage:
         """Return bounded, resolved historical changes for current candidate entities."""
+        ...
+
+    async def get_home_summary(self) -> HomeSummary:
+        """Return one compact whole-home snapshot from a single bulk state read."""
+        ...
+
+    async def find_unavailable_entities(
+        self, filters: UnavailableEntityFilters
+    ) -> UnavailableEntitiesPage:
+        """Return unavailable entities with honest current-state duration evidence."""
+        ...
+
+    async def find_low_batteries(self, filters: LowBatteryFilters) -> LowBatteriesPage:
+        """Return genuine percentage battery sensors at or below a threshold."""
+        ...
+
+    async def get_openings(self, filters: OpeningFilters) -> OpeningsPage:
+        """Return semantically classified doors, windows, garages, and openings."""
+        ...
+
+    async def get_lights_on(self, filters: LocationFilters) -> LightsOnPage:
+        """Return a bounded current list of lights reporting on."""
+        ...
+
+    async def diagnose_home(self, *, limit: int) -> HomeDiagnosticsReport:
+        """Return deterministic evidence-backed findings from one current snapshot."""
         ...
 
 
@@ -331,6 +370,27 @@ class HomeAssistantClient:
             truncated=len(changes) > effective_limit,
         )
 
+    async def get_home_summary(self) -> HomeSummary:
+        """Build a compact snapshot from one bulk state read and cached registries."""
+        return (await self._home_analyzer()).home_summary()
+
+    async def find_unavailable_entities(
+        self, filters: UnavailableEntityFilters
+    ) -> UnavailableEntitiesPage:
+        return (await self._home_analyzer()).unavailable_entities(filters)
+
+    async def find_low_batteries(self, filters: LowBatteryFilters) -> LowBatteriesPage:
+        return (await self._home_analyzer()).low_batteries(filters)
+
+    async def get_openings(self, filters: OpeningFilters) -> OpeningsPage:
+        return (await self._home_analyzer()).openings(filters)
+
+    async def get_lights_on(self, filters: LocationFilters) -> LightsOnPage:
+        return (await self._home_analyzer()).lights_on(filters)
+
+    async def diagnose_home(self, *, limit: int) -> HomeDiagnosticsReport:
+        return (await self._home_analyzer()).diagnose(limit=limit)
+
     async def refresh_discovery_cache(self) -> None:
         """Explicitly invalidate registry metadata; states are never cached."""
         await self._registry_cache.clear()
@@ -344,6 +404,14 @@ class HomeAssistantClient:
     ) -> tuple[list[Mapping[str, object]], DiscoveryResolver]:
         states, resolver = await asyncio.gather(self._rest.get_states(), self._resolver())
         return list(states), resolver
+
+    async def _home_analyzer(self) -> HomeAnalyzer:
+        states, resolver = await self._states_and_resolver()
+        return HomeAnalyzer(
+            resolver.entities(states, include_attributes=True),
+            battery_warning_threshold=self._settings.battery_warning_threshold,
+            ignored_entity_ids=self._settings.ignored_diagnostic_entity_ids,
+        )
 
     def _history_window(
         self, *, start: str | None, end: str | None, duration_minutes: int | None

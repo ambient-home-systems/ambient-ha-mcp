@@ -7,6 +7,12 @@ from ambient_ha.config import Settings
 from ambient_ha.ha.client import HomeAssistantClient
 from ambient_ha.models.discovery import EntitySearchFilters
 from ambient_ha.models.history import RecentChangesFilters
+from ambient_ha.models.home import (
+    LocationFilters,
+    LowBatteryFilters,
+    OpeningFilters,
+    UnavailableEntityFilters,
+)
 
 
 @pytest.mark.integration
@@ -28,6 +34,22 @@ async def test_real_home_assistant_connection() -> None:
     assert entities.returned <= 1
     assert isinstance(areas_supported, bool)
     assert isinstance(floors_supported, bool)
+
+    summary = await client.get_home_summary()
+    unavailable = await client.find_unavailable_entities(UnavailableEntityFilters(limit=5))
+    batteries = await client.find_low_batteries(
+        LowBatteryFilters(threshold=settings.battery_warning_threshold, limit=5)
+    )
+    openings = await client.get_openings(OpeningFilters(limit=5))
+    lights = await client.get_lights_on(LocationFilters(limit=5))
+    diagnostics = await client.diagnose_home(limit=5)
+
+    assert summary.total_entities >= summary.unavailable_entities
+    assert unavailable.returned <= 5
+    assert batteries.returned <= 5
+    assert openings.returned <= 5
+    assert lights.returned <= 5
+    assert diagnostics.returned <= 5
 
     if entities.entities:
         entity_id = entities.entities[0].entity_id

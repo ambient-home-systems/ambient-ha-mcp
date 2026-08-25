@@ -51,9 +51,16 @@ variables. Never put those values in test code or CI repository variables unless
 the CI environment and secret permissions have been reviewed.
 
 The integration test exercises only authenticated REST/WebSocket reads: connection,
-discovery, a small entity-history query, a small logbook query, and a small
-recent-change query when an entity exists. It skips cleanly when opt-in is absent
-and never prints the configured URL or token.
+discovery, a small entity-history query, a small logbook query, a small
+recent-change query, and all Phase 4 whole-home diagnostic views. It skips cleanly
+when opt-in is absent and never prints the configured URL or token.
+
+### Phase 3.5 live-validation status
+
+Phase 3.5 remains blocked solely because `HOME_ASSISTANT_URL` and
+`HOME_ASSISTANT_TOKEN` were unavailable in the validation runtime. Repository,
+unit, protocol, lint, type, and package checks passed, but this is not a claim of
+production validation against a real Home Assistant installation.
 
 ## Discovery implementation notes
 
@@ -79,6 +86,19 @@ and never prints the configured URL or token.
   to 50.
 - Recorder exclusions, retention/purges, disabled Recorder, and unavailable
   logbook data are normal conditions represented by structured results.
+
+## Whole-home diagnostic implementation notes
+
+- `BATTERY_WARNING_THRESHOLD` defaults to 20 percent and accepts 1–100.
+- `IGNORED_DIAGNOSTIC_ENTITIES` is an optional comma-separated entity-ID list
+  excluded from all aggregate Phase 4 views.
+- Every Phase 4 tool performs one bulk state read and one cache lookup; it makes no
+  serial per-entity state calls.
+- Unavailable-duration filtering uses the current state's timezone-aware
+  `last_changed`. Missing or invalid evidence is reported as incomplete and the
+  affected entity is not assumed to meet the requested duration.
+- Array limits default to 25 and are capped at 100. Home-summary details are capped
+  at 10 per section and 10 attention items.
 
 ## Dependency changes
 
