@@ -24,13 +24,13 @@ class PolicyDecision(BaseModel):
 
 
 class PolicyEngine:
-    """Allow reads and deny every control class during Phase 1."""
+    """Allow reads and deny every control class in the current read-only release."""
 
     def evaluate(self, operation: OperationClass) -> PolicyDecision:
         """Make a deterministic, server-side authorization decision."""
         if operation is OperationClass.READ:
-            return PolicyDecision(allowed=True, reason="Read operations are allowed in Phase 1.")
+            return PolicyDecision(allowed=True, reason="Read operations are allowed.")
         return PolicyDecision(
             allowed=False,
-            reason="Control and administrative operations are disabled in Phase 1.",
+            reason="Control and administrative operations are disabled.",
         )

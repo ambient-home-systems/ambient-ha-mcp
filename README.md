@@ -4,8 +4,8 @@ Ambient Home Assistant MCP is a secure, semantic bridge that gives ChatGPT and
 other MCP clients purpose-built access to Home Assistant. It is the server
 foundation for the future user-facing **Ambient Home Assistant** application.
 
-> **Phase 1 status:** foundational, local/private, and read-only. This release
-> exposes connection diagnostics and a safe subset of server metadata. It cannot
+> **Phase 2 status:** local/private and read-only. This release adds semantic
+> entity discovery, current state, areas, floors, and domain summaries. It cannot
 > control devices or change Home Assistant.
 
 ## What it is—and what it is not
@@ -32,8 +32,8 @@ flowchart TD
     T --> H[Home Assistant client facade]
     P --> H
     N --> H
-    H --> R[REST API]
-    H -. future .-> W[WebSocket API]
+    H --> R[REST state API]
+    H --> W[WebSocket registries]
     H -. selective future use .-> M[HA MCP or Assist API]
 ```
 
@@ -41,12 +41,17 @@ MCP tools never make raw HTTP requests. They depend on `HomeAssistantClient`,
 which owns interface selection and immediately normalizes upstream responses.
 See [the architecture decision record](docs/architecture.md).
 
-## Phase 1 capabilities
+## Capabilities
 
 | Surface | Purpose |
 | --- | --- |
 | `ha_connection_status` | Reports reachability and authentication state without exposing credentials. |
 | `ha_server_info` | Returns only version, time zone, and unit-system metadata. |
+| `ha_get_entity` | Gets one current entity by exact entity ID with resolved location and safe attributes. |
+| `ha_search_entities` | Searches current entities by name/ID and composable domain, area, floor, state, and availability filters. |
+| `ha_list_areas` / `ha_get_area` | Lists compact areas or gets one area with domain counts and an optional bounded entity list. |
+| `ha_list_floors` / `ha_get_floor` | Lists floors or gets one floor with area and domain aggregates. |
+| `ha_domain_summary` | Summarizes observed states and availability for any entity domain. |
 | `GET /health` | Reports application liveness and separate Home Assistant readiness. |
 
 No service calls, state changes, or administrative endpoints are implemented.
@@ -58,8 +63,12 @@ No service calls, state changes, or administrative endpoints are implemented.
 - Logs are structured and redact bearer tokens and common credential fields.
 - Raw `/api/config` data is reduced to an allowlisted model before it can reach a
   tool result.
+- Detailed entity attributes use an explicit allowlist and exclude URLs, camera
+  sources, tokens, credentials, coordinates, and location-bearing metadata.
+- Current states are never cached. Registry metadata uses one bounded 60-second
+  TTL cache to avoid repeated WebSocket authentication and registry reads.
 - MCP transport Host and Origin allowlists protect against DNS rebinding.
-- The Phase 1 policy engine allows reads and fails closed for every control class.
+- The policy engine allows reads and fails closed for every control class.
 - The container runs as a non-root user with a read-only filesystem in Compose.
 
 Never commit `.env`, Home Assistant tokens, credentials, private URLs, or
@@ -121,9 +130,8 @@ orchestrator does not restart a healthy bridge in a loop.
 - [Security](docs/security.md)
 - [Tool contracts](docs/tools.md)
 - [Development](docs/development.md)
-- [ChatGPT setup and Phase 1 limitations](docs/chatgpt-setup.md)
+- [ChatGPT setup and current limitations](docs/chatgpt-setup.md)
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
-

@@ -7,7 +7,7 @@ from ambient_ha.models.home_assistant import HomeAssistantServerInfo
 
 
 def normalize_server_info(payload: Mapping[str, Any]) -> HomeAssistantServerInfo:
-    """Keep only non-sensitive fields needed for Phase 1 diagnostics."""
+    """Keep only non-sensitive fields needed for server diagnostics."""
     unit_system = payload.get("unit_system")
     safe_units: dict[str, str] | None = None
     if isinstance(unit_system, dict):

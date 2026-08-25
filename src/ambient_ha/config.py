@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     request_timeout_seconds: float = Field(
         default=10.0, gt=0, le=120, alias="REQUEST_TIMEOUT_SECONDS"
     )
+    registry_cache_ttl_seconds: float = Field(
+        default=60.0, ge=5, le=3600, alias="REGISTRY_CACHE_TTL_SECONDS"
+    )
     read_only: bool = Field(default=True, alias="READ_ONLY")
 
     @field_validator("home_assistant_url")

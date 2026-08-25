@@ -14,6 +14,17 @@ def test_required_configuration_and_defaults() -> None:
     assert settings.home_assistant_token.get_secret_value() == "secret"
     assert settings.log_level == "INFO"
     assert settings.read_only is True
+    assert settings.registry_cache_ttl_seconds == 60
+
+
+@pytest.mark.parametrize("ttl", [4, 3601])
+def test_registry_cache_ttl_is_bounded(ttl: int) -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            HOME_ASSISTANT_URL="http://homeassistant.local:8123",
+            HOME_ASSISTANT_TOKEN="secret",
+            REGISTRY_CACHE_TTL_SECONDS=ttl,
+        )
 
 
 @pytest.mark.parametrize(

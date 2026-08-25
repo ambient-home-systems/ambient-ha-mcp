@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ambient-ha-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "A secure, semantic MCP bridge between ChatGPT and Home Assistant"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -26,6 +26,7 @@ dependencies = [
   "pydantic-settings>=2.15,<3",
   "starlette>=0.47,<1",
   "uvicorn>=0.35,<1",
+  "websockets>=15,<17",
 ]
 
 [project.optional-dependencies]

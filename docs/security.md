@@ -1,6 +1,6 @@
 # Security
 
-## Phase 1 posture
+## Current posture
 
 This release is a local/private, read-only foundation. It does not implement
 bridge OAuth, user management, service execution, device control, Home Assistant
@@ -27,13 +27,25 @@ remove it from repository history using an appropriate secret-removal process.
 
 Home Assistant long-lived tokens inherit the permissions of their user. Create a
 dedicated Home Assistant user for the bridge and grant no more access than the
-deployment requires. Phase 1 performs only authenticated `GET` requests.
+deployment requires. The bridge performs authenticated REST `GET` requests and
+read-only WebSocket registry commands only.
 
 ## Data minimization
 
 The upstream `/api/config` response can include precise location and filesystem
 information. The bridge allowlists only version, time zone, and unit-system data.
 Do not return raw configuration objects from new tools.
+
+Search, area, floor, and domain results contain compact entity/location metadata
+and current state only. `ha_get_entity` uses a strict attribute allowlist intended
+for useful device measurements and operating state. It excludes token, secret,
+credential, URL, camera/stream, media-content, GPS, latitude, longitude, and
+location-bearing keys, and rejects URL-like values. Attribute counts, string
+lengths, and nested collections are bounded.
+
+Entity state is never cached. Entity, device, area, and floor registry metadata is
+cached in one in-process snapshot for `REGISTRY_CACHE_TTL_SECONDS` (60 seconds by
+default), reducing access frequency without persisting household metadata.
 
 ## Logs
 
@@ -63,4 +75,3 @@ they are not the authorization boundary.
 
 Do not open a public issue containing a live credential or private Home Assistant
 data. Revoke exposed credentials before sharing a minimized reproduction.
-

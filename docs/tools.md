@@ -1,40 +1,83 @@
 # MCP tool contracts
 
-Phase 1 tools are diagnostic and read-only. They return structured models so an
-LLM does not need to parse prose to determine success.
+All tools are read-only and return structured models. Errors use stable codes and
+safe messages; normal not-found and unsupported-feature outcomes are represented
+in the result rather than raised as generic failures.
 
-## `ha_connection_status`
+## Diagnostics
 
-Use first when a Home Assistant request fails.
+### `ha_connection_status`
 
-Returns:
+Use first when a Home Assistant request fails. It reports reachability and
+authentication independently and never includes a URL, token, authorization
+header, raw response, or stack trace.
 
-- `status`: `connected`, `authentication_failed`, `unreachable`, or `error`;
-- `reachable`: whether Home Assistant responded;
-- `authenticated`: whether the configured token was accepted;
-- `message`: a safe next-step description; and
-- `error_code`: a stable machine-readable code when a failure occurred.
+### `ha_server_info`
 
-The result never includes a URL, token, authorization header, raw response, or
-stack trace.
+Returns only Home Assistant version, time zone, and string fields from the unit
+system. Coordinates, location name, configuration paths, components, and unknown
+configuration fields are excluded.
 
-## `ha_server_info`
+## Entity discovery
 
-Returns:
+### `ha_get_entity(entity_id)`
 
-- `available` and a safe message;
-- `server.version`;
-- `server.time_zone`; and
-- string fields from `server.unit_system`.
+Use when the exact `domain.object_id` is known. Returns fresh current state,
+friendly name, availability, device, resolved area/floor, timestamps, and a
+bounded allowlist of useful attributes. It returns `found: false` for a missing
+entity. Human names should use search instead.
 
-It deliberately excludes latitude, longitude, location name, configuration
-directories, loaded components, external directories, allowlists, entity data,
-and all unknown fields.
+### `ha_search_entities(...)`
 
-## Tool design rules
+Accepts optional `query`, `domain`, `area`, `floor`, `state`, `available`, and
+`limit` arguments. All supplied filters compose. Query matching is
+case-insensitive across entity/object IDs, friendly names, devices, areas, and
+floors. Entity/name matches outrank contextual location matches and ordering is
+deterministic.
 
-Future tools should describe a recognizable user goal, expose the smallest useful
-schema, and return normalized data. Do not add a generic REST/WebSocket/service
-caller. Tool descriptions should tell an LLM when to use the tool, what it returns,
-and important limits.
+Results are compact and contain no attribute dictionaries. The default limit is
+25 and the hard maximum is 100. `total_matches`, `returned`, and `truncated` make
+partial results explicit.
 
+Examples:
+
+- `{"query": "garage light"}` finds human-named or ID-matched garage lights.
+- `{"domain": "light", "state": "on", "area": "Kitchen"}` applies all three filters.
+- `{"available": false}` lists entities whose current state is `unavailable`.
+
+## Areas and floors
+
+### `ha_list_areas()`
+
+Returns compact area/floor/entity counts without embedding entity arrays.
+
+### `ha_get_area(area, include_entities=false, limit=25)`
+
+Resolves an area by ID or case-insensitive name and returns counts by domain.
+Entity summaries are omitted unless explicitly requested, then capped at 50 with
+truncation metadata. An entity registry area overrides its device's inherited
+area.
+
+### `ha_list_floors()`
+
+Returns configured floors with level, area count, and entity count. Older Home
+Assistant installations without the floor command return `supported: false`.
+
+### `ha_get_floor(floor)`
+
+Resolves a floor by ID or name and returns its compact areas plus entity counts by
+domain. It does not embed every entity.
+
+## Domain aggregation
+
+### `ha_domain_summary(domain)`
+
+Returns total, available, unavailable, unknown, and counts for every observed
+state in a domain. The model is generic: it does not assume lights, sensors,
+covers, climate entities, and other domains all use `on`/`off` semantics.
+
+## Design rules
+
+New tools must describe a recognizable user goal, expose the smallest useful
+schema, normalize every upstream payload, bound arrays, and make partial data
+explicit. Do not add a generic REST, WebSocket, or service-call escape hatch.
