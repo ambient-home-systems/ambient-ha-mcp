@@ -36,7 +36,9 @@ uv run mypy
 ```
 
 Normal tests use `httpx.MockTransport` and in-memory MCP clients; they never need
-a real Home Assistant installation.
+a real Home Assistant installation. Discovery fixtures deliberately keep entity
+states and registry rows separate so tests exercise the same join rules as the
+production adapters.
 
 To opt into the real integration smoke test:
 
@@ -47,6 +49,17 @@ RUN_HA_INTEGRATION_TESTS=1 uv run pytest -m integration
 The real test uses the same `HOME_ASSISTANT_URL` and `HOME_ASSISTANT_TOKEN`
 variables. Never put those values in test code or CI repository variables unless
 the CI environment and secret permissions have been reviewed.
+
+## Discovery implementation notes
+
+- Current states come from `GET /api/states` or `GET /api/states/{entity_id}` and
+  are never cached.
+- Entity, device, area, and floor registries come from authenticated Home Assistant
+  WebSocket registry-list commands.
+- Registry snapshots use `REGISTRY_CACHE_TTL_SECONDS` (default 60, allowed 5–3600).
+- `HomeAssistantClient.refresh_discovery_cache()` invalidates the snapshot for
+  programmatic callers; the next request reloads all registries.
+- Unknown area/floor registry commands are represented as unsupported features.
 
 ## Dependency changes
 
@@ -69,4 +82,3 @@ docker compose up --build
 
 Compose mounts no source or secret files into the image; it passes `.env` values
 as process environment variables and publishes only to loopback.
-

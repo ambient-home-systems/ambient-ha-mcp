@@ -1,5 +1,25 @@
 """Semantic read-only MCP tool services."""
 
 from ambient_ha.tools.diagnostics import connection_status, health_status, server_info
+from ambient_ha.tools.discovery import (
+    domain_summary,
+    get_area,
+    get_entity,
+    get_floor,
+    list_areas,
+    list_floors,
+    search_entities,
+)
 
-__all__ = ["connection_status", "health_status", "server_info"]
+__all__ = [
+    "connection_status",
+    "domain_summary",
+    "get_area",
+    "get_entity",
+    "get_floor",
+    "health_status",
+    "list_areas",
+    "list_floors",
+    "search_entities",
+    "server_info",
+]

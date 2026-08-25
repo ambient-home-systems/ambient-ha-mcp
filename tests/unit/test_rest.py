@@ -85,3 +85,33 @@ async def test_unexpected_response_never_echoes_body_or_token() -> None:
 
     assert token not in str(captured.value)
     assert "debug body" not in str(captured.value)
+
+
+@pytest.mark.anyio
+async def test_get_states_returns_only_object_rows() -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json=[{"entity_id": "light.kitchen", "state": "on"}, "invalid", 2],
+            request=request,
+        )
+    )
+
+    assert await make_api(transport).get_states() == [{"entity_id": "light.kitchen", "state": "on"}]
+
+
+@pytest.mark.anyio
+async def test_get_state_returns_none_for_normal_not_found() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/states/light.kitchen_ceiling"
+        return httpx.Response(404, json={}, request=request)
+
+    assert await make_api(httpx.MockTransport(handler)).get_state("light.kitchen_ceiling") is None
+
+
+@pytest.mark.anyio
+async def test_get_states_rejects_malformed_payload() -> None:
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json={}, request=request))
+
+    with pytest.raises(HomeAssistantUnexpectedResponse, match="state data"):
+        await make_api(transport).get_states()

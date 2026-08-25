@@ -1,11 +1,11 @@
 # ChatGPT setup
 
-## Phase 1: local verification
+## Local verification
 
 Start the bridge and test `http://127.0.0.1:8000/mcp` with MCP Inspector before
-involving ChatGPT. Verify that both tools appear, both return structured data, an
-invalid token produces `authentication_failed`, and no response contains private
-configuration.
+involving ChatGPT. Verify that all tools appear, discovery returns structured
+data, an invalid token produces `authentication_failed`, and no response contains
+tokens, private URLs, camera streams, coordinates, or raw configuration.
 
 ```bash
 npx @modelcontextprotocol/inspector@latest
@@ -20,7 +20,7 @@ the server URL or tunnel connection. See OpenAI's current
 [Connect and test your plugin](https://developers.openai.com/plugins/deploy/connect-chatgpt)
 guide and [MCP server guidance](https://developers.openai.com/api/docs/mcp).
 
-**Do not expose this Phase 1 server directly to the public internet.** It has Home
+**Do not expose this server directly to the public internet.** It has Home
 Assistant credentials but intentionally does not yet implement bridge OAuth or
 user authentication. A safe next phase should evaluate Secure MCP Tunnel for the
 private Home Assistant network, then add supported authentication and deployment
@@ -47,5 +47,7 @@ plugins use reviewed metadata snapshots and have a separate update process.
 - "Can the Ambient bridge connect to Home Assistant?"
 - "Which Home Assistant version is running?"
 - "Show only the safe server information available from Home Assistant."
-- "Turn off the kitchen lights." (Expected in Phase 1: no matching control tool.)
-
+- "Find the garage lights."
+- "Which entities are unavailable upstairs?"
+- "Summarize the current states in the cover domain."
+- "Turn off the kitchen lights." (Expected: no matching control tool.)

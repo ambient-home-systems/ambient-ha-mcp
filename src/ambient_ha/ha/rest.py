@@ -5,6 +5,7 @@ from __future__ import annotations
 import ssl
 from collections.abc import Mapping
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -46,7 +47,36 @@ class HomeAssistantRestAPI:
         """Get Home Assistant configuration for immediate normalization."""
         return await self._get_json("/api/config")
 
+    async def get_states(self) -> list[Mapping[str, Any]]:
+        """Return a fresh current-state snapshot without caching dynamic data."""
+        payload = await self._request_json("/api/states")
+        if not isinstance(payload, list):
+            raise HomeAssistantUnexpectedResponse(
+                "Home Assistant returned state data in an unexpected shape."
+            )
+        return [item for item in payload if isinstance(item, dict)]
+
+    async def get_state(self, entity_id: str) -> Mapping[str, Any] | None:
+        """Return one fresh state, or ``None`` for a normal not-found response."""
+        safe_entity_id = quote(entity_id, safe="._")
+        payload = await self._request_json(f"/api/states/{safe_entity_id}", allow_not_found=True)
+        if payload is None:
+            return None
+        if not isinstance(payload, dict):
+            raise HomeAssistantUnexpectedResponse(
+                "Home Assistant returned entity state data in an unexpected shape."
+            )
+        return payload
+
     async def _get_json(self, path: str) -> Mapping[str, Any]:
+        payload = await self._request_json(path)
+        if not isinstance(payload, dict):
+            raise HomeAssistantUnexpectedResponse(
+                "Home Assistant returned JSON in an unexpected shape."
+            )
+        return payload
+
+    async def _request_json(self, path: str, *, allow_not_found: bool = False) -> Any:
         headers = {
             "Authorization": f"Bearer {self._token}",
             "Accept": "application/json",
@@ -83,6 +113,8 @@ class HomeAssistantRestAPI:
             raise HomeAssistantAuthenticationError(
                 "Home Assistant rejected the configured access token."
             )
+        if response.status_code == 404 and allow_not_found:
+            return None
         if response.status_code < 200 or response.status_code >= 300:
             raise HomeAssistantUnexpectedResponse(
                 f"Home Assistant returned unexpected HTTP status {response.status_code}."
@@ -93,10 +125,6 @@ class HomeAssistantRestAPI:
             raise HomeAssistantUnexpectedResponse(
                 "Home Assistant returned a response that was not valid JSON."
             ) from exc
-        if not isinstance(payload, dict):
-            raise HomeAssistantUnexpectedResponse(
-                "Home Assistant returned JSON in an unexpected shape."
-            )
         return payload
 
 
