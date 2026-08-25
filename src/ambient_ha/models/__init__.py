@@ -1,5 +1,25 @@
 """Public normalized models returned by the bridge."""
 
+from ambient_ha.models.automation import (
+    ActivityCauseReport,
+    ActivityCauseResult,
+    AutomationConfigNode,
+    AutomationDefinition,
+    AutomationListPage,
+    AutomationListResult,
+    AutomationReference,
+    AutomationReferencesPage,
+    AutomationReferencesResult,
+    AutomationResult,
+    AutomationSummary,
+    AutomationTrace,
+    AutomationTraceResult,
+    AutomationTracesPage,
+    AutomationTracesResult,
+    AutomationTraceStep,
+    AutomationTraceSummary,
+    CausalityEvidence,
+)
 from ambient_ha.models.diagnostics import ConnectionStatus, HealthStatus, ServerInfoResult
 from ambient_ha.models.discovery import (
     AreaDetail,
@@ -55,10 +75,28 @@ from ambient_ha.models.home import (
 from ambient_ha.models.home_assistant import HomeAssistantServerInfo
 
 __all__ = [
+    "ActivityCauseReport",
+    "ActivityCauseResult",
     "AreaDetail",
     "AreaListResult",
     "AreaResult",
     "AreaSummary",
+    "AutomationConfigNode",
+    "AutomationDefinition",
+    "AutomationListPage",
+    "AutomationListResult",
+    "AutomationReference",
+    "AutomationReferencesPage",
+    "AutomationReferencesResult",
+    "AutomationResult",
+    "AutomationSummary",
+    "AutomationTrace",
+    "AutomationTraceResult",
+    "AutomationTraceStep",
+    "AutomationTraceSummary",
+    "AutomationTracesPage",
+    "AutomationTracesResult",
+    "CausalityEvidence",
     "ConnectionStatus",
     "DiagnosticEntity",
     "DiagnosticFinding",

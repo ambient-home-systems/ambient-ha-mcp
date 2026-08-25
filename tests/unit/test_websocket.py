@@ -4,8 +4,15 @@ from typing import Any
 
 import pytest
 
-from ambient_ha.ha.exceptions import HomeAssistantAuthenticationError
-from ambient_ha.ha.websocket import HomeAssistantWebSocketAPI, _websocket_url
+from ambient_ha.ha.exceptions import (
+    HomeAssistantAuthenticationError,
+    HomeAssistantAuthorizationError,
+)
+from ambient_ha.ha.websocket import (
+    HomeAssistantWebSocketAPI,
+    _command_outcome,
+    _websocket_url,
+)
 
 
 class FakeSocket:
@@ -53,3 +60,16 @@ async def test_auth_failure_never_echoes_token() -> None:
         await api._authenticate(socket)  # type: ignore[arg-type]
 
     assert "do-not-print-this" not in str(captured.value)
+
+
+def test_admin_only_automation_command_reports_permission_denied() -> None:
+    with pytest.raises(HomeAssistantAuthorizationError) as captured:
+        _command_outcome(
+            {
+                "success": False,
+                "error": {"code": "unauthorized", "message": "private upstream detail"},
+            }
+        )
+
+    assert captured.value.code == "permission_denied"
+    assert "private upstream detail" not in str(captured.value)

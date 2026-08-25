@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import json
 import ssl
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeVar
 from urllib.parse import urlsplit, urlunsplit
 
 from websockets.asyncio.client import ClientConnection, connect
@@ -14,6 +15,7 @@ from websockets.exceptions import ConnectionClosed, InvalidHandshake, InvalidURI
 
 from ambient_ha.ha.exceptions import (
     HomeAssistantAuthenticationError,
+    HomeAssistantAuthorizationError,
     HomeAssistantInvalidURL,
     HomeAssistantTimeoutError,
     HomeAssistantTLSFailure,
@@ -22,6 +24,9 @@ from ambient_ha.ha.exceptions import (
 )
 
 _UNSUPPORTED_COMMAND_CODES = {"unknown_command"}
+_NOT_FOUND_CODES = {"not_found"}
+_AUTHORIZATION_CODES = {"unauthorized"}
+T = TypeVar("T")
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +51,46 @@ class RegistryProvider(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
+class AutomationConfigBatch:
+    """Feature-detected automation configurations keyed by entity ID."""
+
+    supported: bool
+    configurations: dict[str, dict[str, Any]]
+    missing: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True, slots=True)
+class AutomationTraceListPayload:
+    supported: bool
+    traces: tuple[dict[str, Any], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class AutomationTracePayload:
+    supported: bool
+    found: bool
+    trace: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AutomationTraceContextsPayload:
+    supported: bool
+    contexts: dict[str, dict[str, str]]
+
+
+class AutomationProvider(Protocol):
+    """Read-only automation configuration and trace interface."""
+
+    async def get_automation_configs(self, entity_ids: list[str]) -> AutomationConfigBatch: ...
+
+    async def list_automation_traces(self, item_id: str | None) -> AutomationTraceListPayload: ...
+
+    async def get_automation_trace(self, item_id: str, run_id: str) -> AutomationTracePayload: ...
+
+    async def get_automation_trace_contexts(self) -> AutomationTraceContextsPayload: ...
+
+
 class HomeAssistantWebSocketAPI:
     """Open a short-lived authenticated socket and read registry snapshots."""
 
@@ -56,6 +101,172 @@ class HomeAssistantWebSocketAPI:
 
     async def get_registries(self) -> RegistrySnapshot:
         """Fetch registries, treating individually unknown commands as unsupported."""
+
+        async def operation(socket: ClientConnection) -> RegistrySnapshot:
+            entity_supported, entities = await self._list(socket, 1, "entity")
+            device_supported, devices = await self._list(socket, 2, "device")
+            area_supported, areas = await self._list(socket, 3, "area")
+            floor_supported, floors = await self._list(socket, 4, "floor")
+            return RegistrySnapshot(
+                entities=tuple(entities),
+                devices=tuple(devices),
+                areas=tuple(areas),
+                floors=tuple(floors),
+                entity_registry_supported=entity_supported,
+                device_registry_supported=device_supported,
+                area_registry_supported=area_supported,
+                floor_registry_supported=floor_supported,
+            )
+
+        return await self._run(operation, "discovery")
+
+    async def get_automation_configs(self, entity_ids: list[str]) -> AutomationConfigBatch:
+        """Read loaded automation definitions through Home Assistant's WebSocket API."""
+
+        async def operation(socket: ClientConnection) -> AutomationConfigBatch:
+            configs: dict[str, dict[str, Any]] = {}
+            missing: set[str] = set()
+            pending = {
+                message_id: entity_id for message_id, entity_id in enumerate(entity_ids, start=1)
+            }
+            for message_id, entity_id in pending.items():
+                await socket.send(
+                    json.dumps(
+                        {
+                            "id": message_id,
+                            "type": "automation/config",
+                            "entity_id": entity_id,
+                        }
+                    )
+                )
+            for _ in pending:
+                response = await _receive_object(socket)
+                response_id = response.get("id")
+                if (
+                    not isinstance(response_id, int)
+                    or response_id not in pending
+                    or response.get("type") != "result"
+                ):
+                    raise HomeAssistantUnexpectedResponse(
+                        "Home Assistant returned an unexpected automation configuration response."
+                    )
+                entity_id = pending[response_id]
+                outcome = _command_outcome(response)
+                if outcome == "unsupported":
+                    return AutomationConfigBatch(supported=False, configurations={})
+                if outcome == "not_found":
+                    missing.add(entity_id)
+                    continue
+                result = response.get("result")
+                config = result.get("config") if isinstance(result, Mapping) else None
+                if not isinstance(config, dict):
+                    raise HomeAssistantUnexpectedResponse(
+                        "Home Assistant returned malformed automation configuration data."
+                    )
+                configs[entity_id] = config
+            return AutomationConfigBatch(
+                supported=True,
+                configurations=configs,
+                missing=frozenset(missing),
+            )
+
+        return await self._run(operation, "automation configuration")
+
+    async def list_automation_traces(self, item_id: str | None) -> AutomationTraceListPayload:
+        """List compact stored trace metadata for one automation."""
+
+        async def operation(socket: ClientConnection) -> AutomationTraceListPayload:
+            command: dict[str, Any] = {
+                "id": 1,
+                "type": "trace/list",
+                "domain": "automation",
+            }
+            if item_id is not None:
+                command["item_id"] = item_id
+            response = await self._command(
+                socket,
+                command,
+            )
+            if _command_outcome(response) == "unsupported":
+                return AutomationTraceListPayload(supported=False)
+            result = response.get("result")
+            if not isinstance(result, list):
+                raise HomeAssistantUnexpectedResponse(
+                    "Home Assistant returned malformed automation trace metadata."
+                )
+            return AutomationTraceListPayload(
+                supported=True,
+                traces=tuple(item for item in result if isinstance(item, dict)),
+            )
+
+        return await self._run(operation, "automation trace listing")
+
+    async def get_automation_trace(self, item_id: str, run_id: str) -> AutomationTracePayload:
+        """Read one full stored automation trace without executing anything."""
+
+        async def operation(socket: ClientConnection) -> AutomationTracePayload:
+            response = await self._command(
+                socket,
+                {
+                    "id": 1,
+                    "type": "trace/get",
+                    "domain": "automation",
+                    "item_id": item_id,
+                    "run_id": run_id,
+                },
+            )
+            outcome = _command_outcome(response)
+            if outcome == "unsupported":
+                return AutomationTracePayload(supported=False, found=False)
+            if outcome == "not_found":
+                return AutomationTracePayload(supported=True, found=False)
+            result = response.get("result")
+            if not isinstance(result, dict):
+                raise HomeAssistantUnexpectedResponse(
+                    "Home Assistant returned malformed automation trace data."
+                )
+            return AutomationTracePayload(supported=True, found=True, trace=result)
+
+        return await self._run(operation, "automation trace retrieval")
+
+    async def get_automation_trace_contexts(self) -> AutomationTraceContextsPayload:
+        """Read the context-to-trace map used for direct causal correlation."""
+
+        async def operation(socket: ClientConnection) -> AutomationTraceContextsPayload:
+            response = await self._command(
+                socket, {"id": 1, "type": "trace/contexts", "domain": "automation"}
+            )
+            if _command_outcome(response) == "unsupported":
+                return AutomationTraceContextsPayload(supported=False, contexts={})
+            result = response.get("result")
+            if not isinstance(result, Mapping):
+                raise HomeAssistantUnexpectedResponse(
+                    "Home Assistant returned malformed automation trace contexts."
+                )
+            contexts = {
+                str(context_id): {str(key): str(value) for key, value in data.items()}
+                for context_id, data in result.items()
+                if isinstance(context_id, str) and isinstance(data, Mapping)
+            }
+            if any(
+                context.get("domain") != "automation"
+                or not context.get("item_id")
+                or not context.get("run_id")
+                for context in contexts.values()
+            ):
+                raise HomeAssistantUnexpectedResponse(
+                    "Home Assistant returned malformed automation trace context data."
+                )
+            return AutomationTraceContextsPayload(supported=True, contexts=contexts)
+
+        return await self._run(operation, "automation trace context retrieval")
+
+    async def _run(
+        self,
+        operation: Callable[[ClientConnection], Awaitable[T]],
+        operation_name: str,
+    ) -> T:
+        """Open one authenticated socket for a bounded read-only operation."""
         try:
             async with asyncio.timeout(self._timeout):
                 async with connect(
@@ -64,13 +275,10 @@ class HomeAssistantWebSocketAPI:
                     close_timeout=min(self._timeout, 5),
                 ) as socket:
                     await self._authenticate(socket)
-                    entity_supported, entities = await self._list(socket, 1, "entity")
-                    device_supported, devices = await self._list(socket, 2, "device")
-                    area_supported, areas = await self._list(socket, 3, "area")
-                    floor_supported, floors = await self._list(socket, 4, "floor")
+                    return await operation(socket)
         except TimeoutError as exc:
             raise HomeAssistantTimeoutError(
-                "Home Assistant WebSocket discovery timed out."
+                f"Home Assistant WebSocket {operation_name} timed out."
             ) from exc
         except InvalidURI as exc:
             raise HomeAssistantInvalidURL(
@@ -86,19 +294,19 @@ class HomeAssistantWebSocketAPI:
                     "A secure WebSocket connection to Home Assistant could not be established."
                 ) from exc
             raise HomeAssistantUnreachableError(
-                "Home Assistant WebSocket discovery could not be reached."
+                f"Home Assistant WebSocket {operation_name} could not be reached."
             ) from exc
 
-        return RegistrySnapshot(
-            entities=tuple(entities),
-            devices=tuple(devices),
-            areas=tuple(areas),
-            floors=tuple(floors),
-            entity_registry_supported=entity_supported,
-            device_registry_supported=device_supported,
-            area_registry_supported=area_supported,
-            floor_registry_supported=floor_supported,
-        )
+    async def _command(
+        self, socket: ClientConnection, payload: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        await socket.send(json.dumps(payload))
+        response = await _receive_object(socket)
+        if response.get("id") != payload.get("id") or response.get("type") != "result":
+            raise HomeAssistantUnexpectedResponse(
+                "Home Assistant returned an unexpected WebSocket command response."
+            )
+        return response
 
     async def _authenticate(self, socket: ClientConnection) -> None:
         opening = await _receive_object(socket)
@@ -174,3 +382,21 @@ def _contains_ssl_error(exc: BaseException) -> bool:
             return True
         current = current.__cause__ or current.__context__
     return False
+
+
+def _command_outcome(response: Mapping[str, Any]) -> str:
+    if response.get("success") is True:
+        return "success"
+    error = response.get("error")
+    code = error.get("code") if isinstance(error, Mapping) else None
+    if code in _UNSUPPORTED_COMMAND_CODES:
+        return "unsupported"
+    if code in _NOT_FOUND_CODES:
+        return "not_found"
+    if code in _AUTHORIZATION_CODES:
+        raise HomeAssistantAuthorizationError(
+            "Home Assistant requires administrator permission for automation intelligence."
+        )
+    raise HomeAssistantUnexpectedResponse(
+        "Home Assistant rejected a read-only automation intelligence request."
+    )

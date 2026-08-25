@@ -22,6 +22,14 @@ class HomeAssistantAuthenticationError(HomeAssistantError):
     reachable = True
 
 
+class HomeAssistantAuthorizationError(HomeAssistantError):
+    """Credentials are valid but lack permission for a requested read."""
+
+    code = "permission_denied"
+    reachable = True
+    authenticated = True
+
+
 class HomeAssistantTimeoutError(HomeAssistantError):
     """Home Assistant did not respond within the configured timeout."""
 

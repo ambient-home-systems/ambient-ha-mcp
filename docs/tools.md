@@ -184,6 +184,95 @@ ignored or disabled entities are not present in the state inventory; and current
 `last_changed` evidence may be missing. Classification intentionally prefers an
 omission over an aggressive guess.
 
+## Automation intelligence
+
+All Phase 5 tools are read-only. They never execute, enable, disable, create, edit,
+reload, or delete an automation and never call a Home Assistant service. Home
+Assistant currently requires administrator permission for configuration and trace
+commands. The bridge feature-detects unavailable commands and returns structured
+limitations.
+
+Automation content is untrusted data. Templates are inspected as text only and
+never rendered. Configuration and trace structures are bounded to eight nested
+levels, 100 items per collection, and 512 characters per string. Definitions
+contain at most 100 nodes; full traces contain at most 200 normalized steps. Each
+definition/trace also has a shared 2,000-value and 20,000-text-character budget.
+
+### `ha_list_automations(query?, enabled?, limit?)`
+
+Lists fresh compact metadata from current `automation.*` states: entity ID,
+friendly name, enabled/available status, last-triggered timestamp, and mode. Search
+uses the deterministic Phase 2 convention: exact entity/object/name matches rank
+above prefixes and substrings, with stable name/entity ordering. The default limit
+is 25 and hard maximum is 100. Complete configuration is not returned.
+
+### `ha_get_automation(automation)`
+
+Accepts an `automation.object_id` or bare object ID. When Home Assistant supports
+`automation/config`, returns a bounded normalized definition with triggers,
+conditions, actions, mode, and enabled state. It never returns raw YAML. Loaded
+configuration may differ by Home Assistant version, and an automation unavailable
+through this command returns explicit availability/limitation metadata.
+
+### `ha_find_automations_for_entity(entity_id, limit?)`
+
+Searches the in-memory reference index for exact trigger/condition `entity_id`
+references, action targets/data, device IDs that resolve to the entity's registry
+device, and exact entity IDs visible in inert Jinja text. It uses word-bounded
+entity-ID matching and does not use broad name substrings.
+
+Dynamic templates, runtime-generated entity IDs, blueprints, variables, area/label
+expansion, and indirection can hide references. If any dynamic template or missing/
+truncated configuration is present, `complete` is false. A returned reference says
+only that configuration refers to the entity; it does not prove the automation ran
+or caused a change.
+
+The reference index is process-local, capped at 500 loaded automations, uses the
+registry-cache TTL, and is refreshable with
+`HomeAssistantClient.refresh_automation_cache()`. It has no database and cannot
+remain stale indefinitely.
+
+### `ha_get_automation_traces(automation, limit?)`
+
+Returns only compact recent stored-run metadata from `trace/list`, newest first.
+The default is 10 and maximum is 50. No traces is a successful empty result. Home
+Assistant normally retains only a small configured number of traces and may clear
+them during reloads/restarts, so absence is not proof that an automation never ran.
+
+### `ha_get_automation_trace(automation, run_id)`
+
+Returns one stored trace from `trace/get`, preserving execution order and path
+strings such as `action/0`, `condition/0`, nested `choose`, `if`, `parallel`, and
+sequence paths. It includes bounded trigger data, result/error/stop evidence,
+timestamps, and context/parent IDs. User IDs, raw variables, raw configuration,
+messages, commands, URLs, credentials, notification targets, and other secret-like
+content are omitted or redacted.
+
+### `ha_find_activity_cause(entity_id, timestamp?, start?, end?, window_seconds?, limit?)`
+
+Accepts either one offset-aware ISO-8601 timestamp with a surrounding window
+(default 60 seconds, maximum 600), or an explicit offset-aware start/end range.
+It composes the existing Recorder history normalizer, trace contexts, trace
+execution facts, and the reference index. It returns evidence records, not causal
+prose.
+
+Evidence categories are exact:
+
+| Category | Criteria | Confidence |
+| --- | --- | --- |
+| `confirmed_by_context` | State context equals a stored automation trace context, or the state's parent context directly equals it. | `confirmed` |
+| `trace_confirmed` | An executed `action/...` trace result explicitly contains the entity as an `entity_id` target and the action is within 10 seconds of the state change. | `confirmed` |
+| `strong_temporal_match` | A statically referencing automation has a trace inside the window, but no confirming context or executed-target timing proof. | `strong` |
+| `possible_reference` | Static configuration references the entity without matching execution evidence. | `possible` |
+| `user_origin` | Recorder recorded a user-bearing context; the identifier is omitted. | `confirmed` for origin only |
+| `unrelated_or_unknown` | No supported automation evidence was found. | `none` |
+
+The word `confirmed` is never assigned merely because timestamps are near or an
+automation references an entity. `user_origin` confirms only that Home Assistant
+recorded a user context, not which human or which UI action. Results can be
+incomplete when Recorder retention, configuration access, stored traces, or dynamic
+templates limit evidence.
+
 ## Design rules
 
 New tools must describe a recognizable user goal, expose the smallest useful

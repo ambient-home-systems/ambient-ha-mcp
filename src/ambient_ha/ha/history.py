@@ -162,6 +162,7 @@ def build_recent_changes(
                     floor_name=entity.floor_name if entity else None,
                     context_id=transition.context_id,
                     context_parent_id=transition.context_parent_id,
+                    origin=transition.origin,
                 )
             )
     return sorted(
@@ -213,6 +214,7 @@ def _normalize_entity_history(rows: Iterable[Any], *, window: QueryWindow) -> li
                 attributes=sanitize_attributes(attributes),
                 context_id=_text(context.get("id")),
                 context_parent_id=_text(context.get("parent_id")),
+                origin="user" if _text(context.get("user_id")) else "unknown",
                 began_within_range=began_within_range,
                 duration_seconds=duration,
                 duration_complete=duration is not None,
