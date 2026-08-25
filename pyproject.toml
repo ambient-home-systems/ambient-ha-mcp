@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ambient-ha-mcp"
+version = "0.1.0"
+description = "A secure, semantic MCP bridge between ChatGPT and Home Assistant"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [{ name = "Ambient Home Systems" }]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Typing :: Typed",
+]
+dependencies = [
+  "httpx>=0.28.1,<1",
+  "mcp>=2.1.0,<3",
+  "pydantic>=2.12,<3",
+  "pydantic-settings>=2.15,<3",
+  "starlette>=0.47,<1",
+  "uvicorn>=0.35,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "anyio>=4.10,<5",
+  "mypy>=1.17,<2",
+  "pytest>=8.4,<10",
+  "ruff>=0.12,<1",
+]
+
+[project.scripts]
+ambient-ha-mcp = "ambient_ha.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ambient_ha"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers"
+testpaths = ["tests"]
+markers = ["integration: requires a real Home Assistant instance and explicit opt-in"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["upload"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC", "S", "RUF"]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "S105", "S106"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["ambient_ha"]
+mypy_path = "src"
+warn_unused_ignores = true
