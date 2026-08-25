@@ -5,6 +5,8 @@ import pytest
 
 from ambient_ha.ha.exceptions import (
     HomeAssistantAuthenticationError,
+    HomeAssistantLogbookUnavailable,
+    HomeAssistantRecorderUnavailable,
     HomeAssistantTimeoutError,
     HomeAssistantTLSFailure,
     HomeAssistantUnexpectedResponse,
@@ -115,3 +117,65 @@ async def test_get_states_rejects_malformed_payload() -> None:
 
     with pytest.raises(HomeAssistantUnexpectedResponse, match="state data"):
         await make_api(transport).get_states()
+
+
+@pytest.mark.anyio
+async def test_history_request_uses_only_read_only_bounded_query_parameters() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert request.url.path == "/api/history/period/2026-08-25T12:00:00+00:00"
+        assert request.url.params["filter_entity_id"] == "light.kitchen,cover.garage"
+        assert request.url.params["end_time"] == "2026-08-25T13:00:00+00:00"
+        assert "minimal_response" in request.url.query.decode()
+        return httpx.Response(200, json=[[]], request=request)
+
+    assert await make_api(httpx.MockTransport(handler)).get_history(
+        entity_ids=["light.kitchen", "cover.garage"],
+        start="2026-08-25T12:00:00+00:00",
+        end="2026-08-25T13:00:00+00:00",
+        minimal_response=True,
+    ) == [[]]
+
+
+@pytest.mark.anyio
+async def test_recorder_and_logbook_absence_are_normalized() -> None:
+    recorder = httpx.MockTransport(lambda request: httpx.Response(404, json={}, request=request))
+    logbook = httpx.MockTransport(lambda request: httpx.Response(503, json={}, request=request))
+
+    with pytest.raises(HomeAssistantRecorderUnavailable, match="historical data"):
+        await make_api(recorder).get_history(
+            entity_ids=["light.kitchen"],
+            start="2026-08-25T12:00:00+00:00",
+            end="2026-08-25T13:00:00+00:00",
+            minimal_response=True,
+        )
+    with pytest.raises(HomeAssistantLogbookUnavailable, match="historical data"):
+        await make_api(logbook).get_logbook(
+            start="2026-08-25T12:00:00+00:00",
+            end="2026-08-25T13:00:00+00:00",
+            entity_id=None,
+        )
+
+
+@pytest.mark.anyio
+async def test_historical_reads_reuse_safe_authentication_and_timeout_handling() -> None:
+    unauthorized = httpx.MockTransport(
+        lambda request: httpx.Response(401, json={}, request=request)
+    )
+
+    def timeout(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    with pytest.raises(HomeAssistantAuthenticationError):
+        await make_api(unauthorized).get_history(
+            entity_ids=["light.kitchen"],
+            start="2026-08-25T12:00:00+00:00",
+            end="2026-08-25T13:00:00+00:00",
+            minimal_response=True,
+        )
+    with pytest.raises(HomeAssistantTimeoutError):
+        await make_api(httpx.MockTransport(timeout)).get_logbook(
+            start="2026-08-25T12:00:00+00:00",
+            end="2026-08-25T13:00:00+00:00",
+            entity_id=None,
+        )

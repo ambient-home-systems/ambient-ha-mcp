@@ -21,6 +21,7 @@ from ambient_ha.models.discovery import (
     FloorListResult,
     FloorResult,
 )
+from ambient_ha.models.history import EntityHistoryResult, LogbookResult, RecentChangesResult
 from ambient_ha.tools.diagnostics import connection_status, health_status, server_info
 from ambient_ha.tools.discovery import (
     domain_summary as domain_summary_tool,
@@ -43,6 +44,15 @@ from ambient_ha.tools.discovery import (
 from ambient_ha.tools.discovery import (
     search_entities as search_entities_tool,
 )
+from ambient_ha.tools.history import (
+    get_entity_history as get_entity_history_tool,
+)
+from ambient_ha.tools.history import (
+    get_logbook as get_logbook_tool,
+)
+from ambient_ha.tools.history import (
+    get_recent_changes as get_recent_changes_tool,
+)
 
 
 def build_mcp_server(
@@ -56,8 +66,9 @@ def build_mcp_server(
         "Ambient Home Assistant MCP",
         instructions=(
             "Use these read-only tools to inspect Home Assistant connectivity, entities, "
-            "areas, floors, and current state. Prefer search when a user gives a human name "
-            "instead of an entity ID. No tool changes devices or Home Assistant configuration."
+            "areas, floors, current state, and recorded historical facts. Prefer search when a "
+            "user gives a human name instead of an entity ID. Historical tools report recorded "
+            "facts, not why an event happened. No tool changes Home Assistant."
         ),
     )
 
@@ -179,6 +190,79 @@ def build_mcp_server(
     )
     async def ha_domain_summary(domain: str) -> DomainSummaryResult:
         return await domain_summary_tool(ha_client, domain)
+
+    @server.tool(
+        description=(
+            "Get recorded Home Assistant state transitions for one exact entity ID over an "
+            "explicit ISO-8601 time window. Use this for questions such as when an entity "
+            "changed state or how long a recorded state lasted. Timestamps must include an "
+            "offset or Z; results are bounded and mark incomplete durations honestly. This is "
+            "read-only and reports recorded facts, not why they happened."
+        )
+    )
+    async def ha_get_entity_history(
+        entity_id: str,
+        start: str,
+        end: str | None = None,
+        limit: int | None = None,
+        minimal_response: bool = True,
+    ) -> EntityHistoryResult:
+        return await get_entity_history_tool(
+            ha_client,
+            entity_id,
+            start=start,
+            end=end,
+            limit=limit,
+            minimal_response=minimal_response,
+        )
+
+    @server.tool(
+        description=(
+            "Get recorded Home Assistant logbook facts for an explicit ISO-8601 time window, "
+            "optionally filtered to one entity. Use this for concise activity records when the "
+            "entity ID is known. Results are bounded and privacy-filtered. This is read-only; "
+            "Recorder retention, exclusions, or unavailable logbook data can yield no results."
+        )
+    )
+    async def ha_get_logbook(
+        start: str,
+        end: str | None = None,
+        entity_id: str | None = None,
+        limit: int | None = None,
+    ) -> LogbookResult:
+        return await get_logbook_tool(
+            ha_client, start=start, end=end, entity_id=entity_id, limit=limit
+        )
+
+    @server.tool(
+        description=(
+            "Find recorded Home Assistant state changes across current entities during a "
+            "bounded time window. Filter by area, floor, domain, or exact entity ID. Use this "
+            "for questions such as what changed in a room recently. It returns chronological "
+            "facts only, never causal explanations, and is completely read-only."
+        )
+    )
+    async def ha_get_recent_changes(
+        start: str | None = None,
+        end: str | None = None,
+        duration_minutes: int | None = None,
+        area: str | None = None,
+        floor: str | None = None,
+        domain: str | None = None,
+        entity_id: str | None = None,
+        limit: int | None = None,
+    ) -> RecentChangesResult:
+        return await get_recent_changes_tool(
+            ha_client,
+            start=start,
+            end=end,
+            duration_minutes=duration_minutes,
+            area=area,
+            floor=floor,
+            domain=domain,
+            entity_id=entity_id,
+            limit=limit,
+        )
 
     @server.custom_route("/health", methods=["GET"])  # type: ignore[untyped-decorator]
     async def health(_request: Request) -> Response:

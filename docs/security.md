@@ -47,6 +47,12 @@ Entity state is never cached. Entity, device, area, and floor registry metadata 
 cached in one in-process snapshot for `REGISTRY_CACHE_TTL_SECONDS` (60 seconds by
 default), reducing access frequency without persisting household metadata.
 
+Historical Recorder and logbook data uses the same attribute allowlist and URL/
+credential filtering as current entity data. Logbook messages containing URL or
+credential-like material are redacted. Historical data is never cached. Query
+bounds limit default retention reads to 24 hours, at most 7 days, 500 returned
+records, and 50 aggregate candidate entities by default.
+
 ## Logs
 
 Application logs are structured JSON with timestamp, level, logger, message, and

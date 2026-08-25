@@ -76,6 +76,43 @@ Returns total, available, unavailable, unknown, and counts for every observed
 state in a domain. The model is generic: it does not assume lights, sensors,
 covers, climate entities, and other domains all use `on`/`off` semantics.
 
+## Recorded history
+
+These tools report recorded Home Assistant facts. They do not establish why an
+event happened. Recorder retention, exclusions, purges, and unavailable components
+can produce an empty or unavailable result without indicating a bridge failure.
+
+All explicit timestamps must be ISO-8601 with an explicit UTC offset or `Z`.
+Naive local timestamps are rejected so DST transitions cannot be interpreted
+silently. The default historical window is 24 hours; the default maximum is 7 days.
+Results are capped at 500 records and aggregate change queries at 50 candidate
+entities by default. Every list reports `returned`, `total_*`, and `truncated`.
+
+### `ha_get_entity_history(entity_id, start, end?, limit?, minimal_response?)`
+
+Use for recorded state boundaries of one known entity: for example, when a door
+opened, when a light turned on, or the duration of a state whose ending boundary is
+also recorded. The result includes only safe selected attributes and opaque context
+IDs where available. A duration is absent when its beginning lies outside the
+requested window or its end is not known.
+
+`minimal_response` defaults to true, using Home Assistant's efficient recorder
+response while retaining the first/last metadata when supplied by Home Assistant.
+
+### `ha_get_logbook(start, end?, entity_id?, limit?)`
+
+Use for compact recorded activity facts, optionally for one exact entity. Entries
+are normalized and messages that could contain URLs or credentials are redacted.
+No raw logbook payload or context user ID is returned.
+
+### `ha_get_recent_changes(...)`
+
+Use for questions such as “what changed in the kitchen in the last hour?” It
+accepts a relative `duration_minutes`, or explicit `start`/`end`, plus optional
+area, floor, domain, and exact entity-ID filters. All filters compose. The bridge
+resolves the current candidate entities once and makes a single bulk recorder
+history request; it returns chronological state facts, not explanations.
+
 ## Design rules
 
 New tools must describe a recognizable user goal, expose the smallest useful

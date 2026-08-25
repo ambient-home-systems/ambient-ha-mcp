@@ -45,3 +45,30 @@ class HomeAssistantUnexpectedResponse(HomeAssistantError):
 
     code = "unexpected_response"
     reachable = True
+
+
+class HomeAssistantRecorderUnavailable(HomeAssistantError):
+    """Recorder-backed state history cannot be read on this installation."""
+
+    code = "recorder_unavailable"
+    reachable = True
+    authenticated = True
+
+
+class HomeAssistantLogbookUnavailable(HomeAssistantError):
+    """Logbook data cannot be read on this installation."""
+
+    code = "logbook_unavailable"
+    reachable = True
+    authenticated = True
+
+
+class HomeAssistantQueryError(HomeAssistantError):
+    """A bounded historical query is invalid before it reaches Home Assistant."""
+
+    reachable = True
+    authenticated = True
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code

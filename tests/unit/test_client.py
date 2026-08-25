@@ -5,7 +5,9 @@ from ambient_ha.config import Settings
 from ambient_ha.ha.client import HomeAssistantClient
 from ambient_ha.ha.websocket import RegistrySnapshot
 from ambient_ha.models.discovery import EntitySearchFilters
+from ambient_ha.models.history import RecentChangesFilters
 from tests.fixtures.discovery import REGISTRIES, STATES
+from tests.fixtures.history import HISTORY_PAYLOAD, LOGBOOK_PAYLOAD
 
 
 class FakeRegistryProvider:
@@ -115,3 +117,100 @@ async def test_get_entity_reads_exact_state_and_enriches_it(settings: Settings) 
     assert result is not None
     assert result.area_name == "Kitchen"
     assert result.attributes == {"brightness": 180}
+
+
+@pytest.mark.anyio
+async def test_history_and_logbook_are_normalized_and_bounded(settings: Settings) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/history/period/2024-08-25T12:00:00+00:00":
+            return httpx.Response(200, json=[HISTORY_PAYLOAD[0]], request=request)
+        if request.url.path == "/api/states/cover.garage_door":
+            return httpx.Response(200, json=STATES[2], request=request)
+        if request.url.path == "/api/logbook/2024-08-25T12:00:00+00:00":
+            return httpx.Response(200, json=LOGBOOK_PAYLOAD, request=request)
+        raise AssertionError(f"unexpected path: {request.url.path}")
+
+    client = HomeAssistantClient(
+        settings,
+        transport=httpx.MockTransport(handler),
+        registry_provider=FakeRegistryProvider(),
+    )
+    found, history = await client.get_entity_history(
+        "cover.garage_door",
+        start="2024-08-25T12:00:00Z",
+        end="2024-08-25T12:30:00Z",
+        limit=2,
+        minimal_response=True,
+    )
+    logbook = await client.get_logbook(
+        start="2024-08-25T12:00:00Z",
+        end="2024-08-25T12:30:00Z",
+        entity_id=None,
+        limit=1,
+    )
+
+    assert found is True
+    assert history.total_transitions == 3
+    assert history.returned == 2
+    assert history.truncated is True
+    assert logbook.total_entries == 2
+    assert logbook.returned == 1
+    assert logbook.truncated is True
+    assert "private" not in logbook.model_dump_json()
+
+
+@pytest.mark.anyio
+async def test_recent_changes_uses_one_batched_history_read_and_resolves_filters(
+    settings: Settings,
+) -> None:
+    history_reads = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal history_reads
+        if request.url.path == "/api/states":
+            return httpx.Response(200, json=STATES, request=request)
+        if request.url.path == "/api/history/period/2024-08-25T12:00:00+00:00":
+            history_reads += 1
+            assert request.url.params["filter_entity_id"] == "light.kitchen_ceiling"
+            return httpx.Response(200, json=[HISTORY_PAYLOAD[1]], request=request)
+        raise AssertionError(f"unexpected path: {request.url.path}")
+
+    page = await HomeAssistantClient(
+        settings,
+        transport=httpx.MockTransport(handler),
+        registry_provider=FakeRegistryProvider(),
+    ).get_recent_changes(
+        RecentChangesFilters(
+            start="2024-08-25T12:00:00Z",
+            end="2024-08-25T12:30:00Z",
+            area="Kitchen",
+            domain="light",
+            limit=10,
+        )
+    )
+
+    assert history_reads == 1
+    assert page.candidate_entities == 1
+    assert [(change.previous_state, change.new_state) for change in page.changes] == [("off", "on")]
+
+
+@pytest.mark.anyio
+async def test_recent_changes_rejects_too_many_candidates(settings: Settings) -> None:
+    restricted = settings.model_copy(update={"history_max_entities": 1})
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, json=STATES, request=request)
+    )
+    client = HomeAssistantClient(
+        restricted,
+        transport=transport,
+        registry_provider=FakeRegistryProvider(),
+    )
+
+    from ambient_ha.ha.exceptions import HomeAssistantQueryError
+
+    with pytest.raises(HomeAssistantQueryError, match="more entities") as captured:
+        await client.get_recent_changes(
+            RecentChangesFilters(start="2024-08-25T12:00:00Z", end="2024-08-25T12:30:00Z")
+        )
+
+    assert captured.value.code == "too_many_candidate_entities"
