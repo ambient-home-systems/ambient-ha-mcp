@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import httpx
 import pytest
 from mcp import Client
@@ -38,6 +40,17 @@ from tests.fixtures.automation import (
 )
 from tests.fixtures.discovery import REGISTRIES, STATES
 from tests.fixtures.home import HOME_REGISTRIES, HOME_STATES
+
+
+def test_invalid_policy_file_fails_server_startup(tmp_path: Path) -> None:
+    settings = Settings(
+        HOME_ASSISTANT_URL="http://homeassistant.test:8123",
+        HOME_ASSISTANT_TOKEN="test-secret-token",
+        POLICY_FILE=tmp_path / "missing.toml",
+    )
+
+    with pytest.raises(ValueError, match="could not be read"):
+        build_mcp_server(settings, client=FakeGateway())
 
 
 class FakeGateway:

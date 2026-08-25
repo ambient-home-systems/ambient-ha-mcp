@@ -4,10 +4,11 @@ Ambient Home Assistant MCP is a secure, semantic bridge that gives ChatGPT and
 other MCP clients purpose-built access to Home Assistant. It is the server
 foundation for the future user-facing **Ambient Home Assistant** application.
 
-> **Phase 5 status:** local/private and read-only. This release adds automation
-> discovery, bounded stored-trace analysis, static reference indexing, and strict
-> causality evidence. It cannot run, enable, edit, or create automations and cannot
-> control devices. Phase 3.5/5 live validation remains blocked solely
+> **Phase 6 status:** local/private and read-only. This release adds the
+> server-side policy, dry-run planning, confirmation-state, and redacted audit
+> architecture required before any future control phase. It adds no write tool,
+> action executor, or Home Assistant service call; all 24 MCP tools remain
+> read-only. Phase 3.5–6 live validation remains blocked solely
 > because the required Home Assistant URL and token were unavailable; no
 > production-validation claim is made.
 
@@ -101,7 +102,17 @@ No service calls, state changes, or administrative endpoints are implemented.
   500-automation bound. Current automation entity metadata and Recorder state
   changes remain fresh.
 - MCP transport Host and Origin allowlists protect against DNS rebinding.
-- The policy engine allows reads and fails closed for every control class.
+- Ambient policy is independent of the Home Assistant token's privilege. The
+  engine supports `allow`, `deny`, and `confirm_required`, deterministic rule
+  precedence, canonical targets, value limits, protected entities, and hard
+  mass-action limits.
+- `READ_ONLY=true` is a hard boundary: every non-read operation is denied even if
+  a narrower rule allows it or the Home Assistant credential is an administrator.
+- Dry-run plans are internal-only and always report execution unavailable in
+  Phase 6. Confirmation has no spoofable caller-supplied boolean; it remains an
+  unverified server-challenge concept until a later execution phase.
+- Audit events are bounded and recursively redact credentials, webhooks, URLs,
+  messages, commands, camera streams, and other secret-bearing service data.
 - The container runs as a non-root user with a read-only filesystem in Compose.
 
 Never commit `.env`, Home Assistant tokens, credentials, private URLs, or
@@ -114,6 +125,8 @@ Requirements: Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 ```bash
 cp .env.example .env
 # Edit .env and provide HOME_ASSISTANT_URL and HOME_ASSISTANT_TOKEN.
+# Optional: copy policy.example.toml and set POLICY_FILE to its absolute path.
+# Keep READ_ONLY=true; Phase 6 has no execution path regardless.
 uv sync --all-extras
 uv run ambient-ha-mcp
 ```

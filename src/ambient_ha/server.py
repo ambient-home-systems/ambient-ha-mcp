@@ -40,6 +40,7 @@ from ambient_ha.models.home import (
     OpeningsResult,
     UnavailableEntitiesResult,
 )
+from ambient_ha.policy import OperationClass, PolicyEngine, effective_policy_config
 from ambient_ha.tools.automation import (
     find_activity_cause as find_activity_cause_tool,
 )
@@ -113,9 +114,18 @@ def build_mcp_server(
     settings: Settings,
     *,
     client: HomeAssistantGateway | None = None,
+    policy_engine: PolicyEngine | None = None,
 ) -> MCPServer:
     """Build a testable MCP server with its semantic dependencies injected."""
     ha_client = client or HomeAssistantClient(settings)
+    policy = policy_engine or PolicyEngine(
+        effective_policy_config(
+            environment_read_only=settings.read_only,
+            path=settings.policy_file,
+        )
+    )
+    if not policy.evaluate(OperationClass.READ).allowed:
+        raise RuntimeError("policy configuration denied the required read-only server surface")
     server = MCPServer(
         "Ambient Home Assistant MCP",
         instructions=(

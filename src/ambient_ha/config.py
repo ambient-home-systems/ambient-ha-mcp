@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal, Self
 from urllib.parse import urlsplit
 
@@ -56,6 +57,7 @@ class Settings(BaseSettings):
     )
     ignored_diagnostic_entities: str = Field(default="", alias="IGNORED_DIAGNOSTIC_ENTITIES")
     read_only: bool = Field(default=True, alias="READ_ONLY")
+    policy_file: Path | None = Field(default=None, alias="POLICY_FILE")
 
     @field_validator("home_assistant_url")
     @classmethod

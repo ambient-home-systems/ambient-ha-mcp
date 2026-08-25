@@ -4,6 +4,10 @@ All tools are read-only and return structured models. Errors use stable codes an
 safe messages; normal not-found and unsupported-feature outcomes are represented
 in the result rather than raised as generic failures.
 
+Phase 6 intentionally adds no public MCP tool. The discovery surface remains 24
+read-only tools. Policy planning, confirmation requirements, and audit events are
+internal architecture only and cannot execute a Home Assistant operation.
+
 ## Diagnostics
 
 ### `ha_connection_status`
@@ -278,3 +282,24 @@ templates limit evidence.
 New tools must describe a recognizable user goal, expose the smallest useful
 schema, normalize every upstream payload, bound arrays, and make partial data
 explicit. Do not add a generic REST, WebSocket, or service-call escape hatch.
+
+## Phase 6 internal policy contracts
+
+These are application models, not callable MCP tools:
+
+- `PolicyDecision` carries `allow`, `deny`, or `confirm_required`, operation class,
+  reason, matched rule, canonical target, and safe policy metadata.
+- `ResolvedTarget` accepts a canonical entity ID, matching domain, canonical
+  area/floor IDs, and capability status. It rejects friendly names and other
+  untrusted Home Assistant text.
+- `ActionRequest` represents an already-resolved internal semantic request. It has
+  no caller-spoofable confirmation field.
+- `ActionPlan` explicitly lists allowed, denied, and confirmation targets; limit
+  results; sanitized predicted service data; ambiguity; and confirmation state.
+  It always has `executable: false` and `execution_available: false` in Phase 6.
+- `AuditEvent` records policy facts without tokens, authorization data, webhooks,
+  URLs, camera streams, command/message content, or other secret-like service data.
+
+The planner denies unknown capabilities, ambiguous targets, missing canonical
+targets, excessive targets/operations, value-policy violations, and any policy
+failure. It does not perform partial execution and makes no network call.

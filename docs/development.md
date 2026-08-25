@@ -69,6 +69,40 @@ Phase 5 live validation is likewise outstanding when those variables are absent.
 Phase 5 configuration and trace enrichment currently requires a Home Assistant
 administrator token; use a dedicated validation account and keep the test opt-in.
 
+Phase 6 policy tests are entirely local and do not need Home Assistant credentials.
+The Phase 3.5–6 live read-only validation limitation remains outstanding when the
+variables are absent; this is not a claim of real-installation validation.
+
+## Policy-security implementation notes
+
+- `READ_ONLY=true` is the outer hard boundary. A non-read plan is considered only
+  when both the environment value and an optional policy file set read-only false.
+  Phase 6 still has no executor or write-capable client path in that state.
+- Copy `policy.example.toml`, edit exact canonical IDs only, and set `POLICY_FILE`
+  to its absolute path. The file is strict TOML: unknown keys or invalid values
+  fail startup instead of being ignored.
+- Precedence is hard read-only → hard administrative prohibition → protected
+  entity → entity → domain → operation class → global default.
+- Protected entities may deny or require confirmation, never allow.
+- The planner authorizes only targets already resolved to canonical entity IDs.
+  Ambiguous display-name matches require clarification; capability uncertainty,
+  target/operation limits, or policy exceptions deny the plan.
+- Value checks reject rather than clamp climate, media, light, and fan inputs.
+- Confirmation is an unverified server-challenge model only. There is no
+  `confirmed=true` shortcut and no issuer/verifier in Phase 6.
+- `AuditEvent.safe_json()` recursively bounds and redacts private values. New audit
+  fields must receive adversarial redaction tests before use.
+- Area/floor IDs are present on targets for future integration, but location policy
+  rules are deferred and must never use arbitrary display-name matching.
+
+Useful focused checks:
+
+```bash
+uv run pytest tests/unit/test_policy_core.py \
+  tests/unit/test_policy_config.py tests/unit/test_policy_planning.py
+uv run mypy
+```
+
 ## Discovery implementation notes
 
 - Current states come from `GET /api/states` or `GET /api/states/{entity_id}` and

@@ -6,6 +6,35 @@ on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-25
+
+### Added
+
+- Typed server-side `allow`, `deny`, and `confirm_required` policy decisions with
+  canonical targets, explicit operation classes, deterministic precedence, and
+  protected-entity rules.
+- Strict optional TOML policy configuration, conservative defaults, hard target/
+  operation limits, and bounded climate, lighting, media, and fan values.
+- Internal dry-run action plans with capability checks, ambiguity handling, mixed
+  target reporting, sanitized predicted service data, and no execution path.
+- Future-compatible unverified confirmation requirements without a spoofable
+  caller-supplied boolean.
+- Bounded redacted audit events and a structured-log sink abstraction without a
+  persistent database.
+- Adversarial tests for prompt injection, privilege confusion, normalization,
+  precedence, malformed configuration, policy errors, and audit-secret leakage.
+
+### Security
+
+- `READ_ONLY` is now an outer hard boundary that overrides every non-read rule and
+  confirmation state.
+- Home Assistant credential privilege is explicitly separated from Ambient MCP
+  authorization; administrator access never grants administrative MCP permission.
+- Administrative operations fail closed, scripts/switches default to deny, and
+  opaque scenes/covers default to server-verified confirmation.
+- Phase 6 introduces zero Home Assistant write/service-call paths and keeps all 24
+  MCP tools read-only.
+
 ## [0.5.0] - 2026-08-25
 
 ### Added
