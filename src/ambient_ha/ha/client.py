@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
+from datetime import timedelta
 from typing import Protocol
 
 import httpx
@@ -14,6 +15,14 @@ from ambient_ha.ha.discovery import DiscoveryResolver
 from ambient_ha.ha.exceptions import (
     HomeAssistantAuthenticationError,
     HomeAssistantError,
+    HomeAssistantQueryError,
+)
+from ambient_ha.ha.history import (
+    QueryWindow,
+    build_recent_changes,
+    normalize_history_payload,
+    normalize_logbook_payload,
+    resolve_query_window,
 )
 from ambient_ha.ha.normalize import normalize_server_info
 from ambient_ha.ha.rest import HomeAssistantRestAPI
@@ -32,6 +41,12 @@ from ambient_ha.models.discovery import (
     EntitySearchPage,
     FloorDetail,
     FloorSummary,
+)
+from ambient_ha.models.history import (
+    EntityHistoryPage,
+    LogbookPage,
+    RecentChangesFilters,
+    RecentChangesPage,
 )
 from ambient_ha.models.home_assistant import HomeAssistantServerInfo
 
@@ -77,6 +92,33 @@ class HomeAssistantGateway(Protocol):
         """Aggregate current states for one domain."""
         ...
 
+    async def get_entity_history(
+        self,
+        entity_id: str,
+        *,
+        start: str,
+        end: str | None,
+        limit: int | None,
+        minimal_response: bool,
+    ) -> tuple[bool, EntityHistoryPage]:
+        """Return one entity's bounded recorder history and current/existing status."""
+        ...
+
+    async def get_logbook(
+        self,
+        *,
+        start: str,
+        end: str | None,
+        entity_id: str | None,
+        limit: int | None,
+    ) -> LogbookPage:
+        """Return bounded normalized logbook facts for one explicit time window."""
+        ...
+
+    async def get_recent_changes(self, filters: RecentChangesFilters) -> RecentChangesPage:
+        """Return bounded, resolved historical changes for current candidate entities."""
+        ...
+
 
 class HomeAssistantClient:
     """Coordinate Home Assistant interfaces without leaking them to MCP tools.
@@ -92,6 +134,7 @@ class HomeAssistantClient:
         transport: httpx.AsyncBaseTransport | None = None,
         registry_provider: RegistryProvider | None = None,
     ) -> None:
+        self._settings = settings
         self._rest = HomeAssistantRestAPI(
             base_url=settings.home_assistant_url,
             token=settings.home_assistant_token.get_secret_value(),
@@ -178,6 +221,116 @@ class HomeAssistantClient:
         states, resolver = await self._states_and_resolver()
         return resolver.domain_summary(states, domain)
 
+    async def get_entity_history(
+        self,
+        entity_id: str,
+        *,
+        start: str,
+        end: str | None,
+        limit: int | None,
+        minimal_response: bool,
+    ) -> tuple[bool, EntityHistoryPage]:
+        """Fetch an entity once from recorder and once from current state, both read-only."""
+        window = self._history_window(start=start, end=end, duration_minutes=None)
+        raw_history, current_state = await asyncio.gather(
+            self._rest.get_history(
+                entity_ids=[entity_id],
+                start=window.start_iso,
+                end=window.end_iso,
+                minimal_response=minimal_response,
+            ),
+            self._rest.get_state(entity_id),
+        )
+        transitions = normalize_history_payload(raw_history, window=window).get(entity_id, [])
+        effective_limit = self._history_limit(limit)
+        return (
+            current_state is not None or bool(transitions),
+            EntityHistoryPage(
+                entity_id=entity_id,
+                start=window.start_iso,
+                end=window.end_iso,
+                transitions=transitions[:effective_limit],
+                total_transitions=len(transitions),
+                returned=min(len(transitions), effective_limit),
+                limit=effective_limit,
+                truncated=len(transitions) > effective_limit,
+            ),
+        )
+
+    async def get_logbook(
+        self,
+        *,
+        start: str,
+        end: str | None,
+        entity_id: str | None,
+        limit: int | None,
+    ) -> LogbookPage:
+        """Fetch recorder logbook facts with query-bound protection."""
+        window = self._history_window(start=start, end=end, duration_minutes=None)
+        entries = normalize_logbook_payload(
+            await self._rest.get_logbook(
+                start=window.start_iso, end=window.end_iso, entity_id=entity_id
+            )
+        )
+        effective_limit = self._history_limit(limit)
+        return LogbookPage(
+            start=window.start_iso,
+            end=window.end_iso,
+            entries=entries[:effective_limit],
+            total_entries=len(entries),
+            returned=min(len(entries), effective_limit),
+            limit=effective_limit,
+            truncated=len(entries) > effective_limit,
+        )
+
+    async def get_recent_changes(self, filters: RecentChangesFilters) -> RecentChangesPage:
+        """Resolve current candidates once, then batch their recorder request once."""
+        window = self._history_window(
+            start=filters.start,
+            end=filters.end,
+            duration_minutes=filters.duration_minutes,
+        )
+        states, resolver = await self._states_and_resolver()
+        candidates = [
+            entity
+            for entity in resolver.entities(states)
+            if _matches_recent_change_filters(entity, filters)
+        ]
+        if len(candidates) > self._settings.history_max_entities:
+            raise HomeAssistantQueryError(
+                "too_many_candidate_entities",
+                "The requested filters match more entities than the historical query limit.",
+            )
+        effective_limit = self._history_limit(filters.limit)
+        if not candidates:
+            return RecentChangesPage(
+                start=window.start_iso,
+                end=window.end_iso,
+                candidate_entities=0,
+                total_changes=0,
+                returned=0,
+                limit=effective_limit,
+                truncated=False,
+            )
+        raw_history = await self._rest.get_history(
+            entity_ids=[entity.entity_id for entity in candidates],
+            start=window.start_iso,
+            end=window.end_iso,
+            minimal_response=True,
+        )
+        history = normalize_history_payload(raw_history, window=window)
+        changes = build_recent_changes(history, {entity.entity_id: entity for entity in candidates})
+        return RecentChangesPage(
+            start=window.start_iso,
+            end=window.end_iso,
+            candidate_entities=len(candidates),
+            changes=changes[:effective_limit],
+            total_changes=len(changes),
+            returned=min(len(changes), effective_limit),
+            limit=effective_limit,
+            truncated=len(changes) > effective_limit,
+        )
+
     async def refresh_discovery_cache(self) -> None:
         """Explicitly invalidate registry metadata; states are never cached."""
         await self._registry_cache.clear()
@@ -191,3 +344,39 @@ class HomeAssistantClient:
     ) -> tuple[list[Mapping[str, object]], DiscoveryResolver]:
         states, resolver = await asyncio.gather(self._rest.get_states(), self._resolver())
         return list(states), resolver
+
+    def _history_window(
+        self, *, start: str | None, end: str | None, duration_minutes: int | None
+    ) -> QueryWindow:
+        return resolve_query_window(
+            start=start,
+            end=end,
+            duration_minutes=duration_minutes,
+            default_lookback=timedelta(hours=self._settings.history_default_lookback_hours),
+            maximum_lookback=timedelta(hours=self._settings.history_max_lookback_hours),
+        )
+
+    def _history_limit(self, limit: int | None) -> int:
+        requested = limit if limit is not None else self._settings.history_default_limit
+        return min(max(1, requested), self._settings.history_max_events)
+
+
+def _matches_recent_change_filters(entity: EntityDetail, filters: RecentChangesFilters) -> bool:
+    if filters.entity_id and entity.entity_id.casefold() != filters.entity_id.strip().casefold():
+        return False
+    if filters.domain and entity.domain.casefold() != filters.domain.strip().casefold():
+        return False
+    if filters.area and not _matches_identifier(filters.area, entity.area_id, entity.area_name):
+        return False
+    return not (
+        filters.floor and not _matches_identifier(filters.floor, entity.floor_id, entity.floor_name)
+    )
+
+
+def _matches_identifier(value: str, identifier: str | None, name: str | None) -> bool:
+    target = value.strip().casefold().replace("_", " ")
+    candidates = (identifier, name)
+    return any(
+        candidate is not None and candidate.casefold().replace("_", " ") == target
+        for candidate in candidates
+    )

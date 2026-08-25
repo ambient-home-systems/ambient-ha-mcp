@@ -50,6 +50,11 @@ The real test uses the same `HOME_ASSISTANT_URL` and `HOME_ASSISTANT_TOKEN`
 variables. Never put those values in test code or CI repository variables unless
 the CI environment and secret permissions have been reviewed.
 
+The integration test exercises only authenticated REST/WebSocket reads: connection,
+discovery, a small entity-history query, a small logbook query, and a small
+recent-change query when an entity exists. It skips cleanly when opt-in is absent
+and never prints the configured URL or token.
+
 ## Discovery implementation notes
 
 - Current states come from `GET /api/states` or `GET /api/states/{entity_id}` and
@@ -60,6 +65,20 @@ the CI environment and secret permissions have been reviewed.
 - `HomeAssistantClient.refresh_discovery_cache()` invalidates the snapshot for
   programmatic callers; the next request reloads all registries.
 - Unknown area/floor registry commands are represented as unsupported features.
+
+## Historical implementation notes
+
+- History uses Home Assistant's official `GET /api/history/period/<timestamp>`
+  endpoint with entity filters; aggregate changes use one batched history request.
+- Logbook uses the official `GET /api/logbook/<timestamp>` endpoint.
+- Tool timestamps must be ISO-8601 with an explicit UTC offset or `Z`; naive time
+  is rejected to avoid ambiguous local/DST behavior.
+- `HISTORY_DEFAULT_LOOKBACK_HOURS` defaults to 24 and
+  `HISTORY_MAX_LOOKBACK_HOURS` defaults to 168. `HISTORY_MAX_EVENTS` defaults to
+  500, `HISTORY_DEFAULT_LIMIT` defaults to 100, and `HISTORY_MAX_ENTITIES` defaults
+  to 50.
+- Recorder exclusions, retention/purges, disabled Recorder, and unavailable
+  logbook data are normal conditions represented by structured results.
 
 ## Dependency changes
 

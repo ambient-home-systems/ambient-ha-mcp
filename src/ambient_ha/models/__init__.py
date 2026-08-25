@@ -19,6 +19,18 @@ from ambient_ha.models.discovery import (
     FloorResult,
     FloorSummary,
 )
+from ambient_ha.models.history import (
+    EntityHistoryPage,
+    EntityHistoryResult,
+    LogbookEntry,
+    LogbookPage,
+    LogbookResult,
+    RecentChange,
+    RecentChangesFilters,
+    RecentChangesPage,
+    RecentChangesResult,
+    StateTransition,
+)
 from ambient_ha.models.home_assistant import HomeAssistantServerInfo
 
 __all__ = [
@@ -30,6 +42,8 @@ __all__ = [
     "DomainSummary",
     "DomainSummaryResult",
     "EntityDetail",
+    "EntityHistoryPage",
+    "EntityHistoryResult",
     "EntityResult",
     "EntitySearchFilters",
     "EntitySearchPage",
@@ -41,5 +55,13 @@ __all__ = [
     "FloorSummary",
     "HealthStatus",
     "HomeAssistantServerInfo",
+    "LogbookEntry",
+    "LogbookPage",
+    "LogbookResult",
+    "RecentChange",
+    "RecentChangesFilters",
+    "RecentChangesPage",
+    "RecentChangesResult",
     "ServerInfoResult",
+    "StateTransition",
 ]

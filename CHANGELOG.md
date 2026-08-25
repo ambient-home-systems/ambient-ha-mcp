@@ -6,6 +6,17 @@ on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-25
+
+### Added
+
+- Read-only Recorder history, logbook, and semantic recent-change MCP tools.
+- Offset-aware historical query validation with bounded lookback, events, and
+  aggregate candidate entities.
+- Normalized state transitions, conservative duration calculations, privacy-filtered
+  logbook entries, and resolved recent-change facts.
+- Opt-in Phase 1–3 live integration coverage without credentials in source or CI.
+
 ## [0.2.0] - 2026-08-25
 
 ### Added

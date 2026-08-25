@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, Self
 from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -42,6 +42,15 @@ class Settings(BaseSettings):
     registry_cache_ttl_seconds: float = Field(
         default=60.0, ge=5, le=3600, alias="REGISTRY_CACHE_TTL_SECONDS"
     )
+    history_default_lookback_hours: int = Field(
+        default=24, ge=1, le=168, alias="HISTORY_DEFAULT_LOOKBACK_HOURS"
+    )
+    history_max_lookback_hours: int = Field(
+        default=168, ge=1, le=720, alias="HISTORY_MAX_LOOKBACK_HOURS"
+    )
+    history_default_limit: int = Field(default=100, ge=1, le=500, alias="HISTORY_DEFAULT_LIMIT")
+    history_max_events: int = Field(default=500, ge=1, le=1000, alias="HISTORY_MAX_EVENTS")
+    history_max_entities: int = Field(default=50, ge=1, le=100, alias="HISTORY_MAX_ENTITIES")
     read_only: bool = Field(default=True, alias="READ_ONLY")
 
     @field_validator("home_assistant_url")
@@ -57,6 +66,17 @@ class Settings(BaseSettings):
         if parsed.query or parsed.fragment:
             raise ValueError("HOME_ASSISTANT_URL must not contain a query or fragment")
         return cleaned
+
+    @model_validator(mode="after")
+    def validate_history_query_bounds(self) -> Self:
+        """Keep default historical queries within their configured hard bounds."""
+        if self.history_default_lookback_hours > self.history_max_lookback_hours:
+            raise ValueError(
+                "HISTORY_DEFAULT_LOOKBACK_HOURS must not exceed HISTORY_MAX_LOOKBACK_HOURS"
+            )
+        if self.history_default_limit > self.history_max_events:
+            raise ValueError("HISTORY_DEFAULT_LIMIT must not exceed HISTORY_MAX_EVENTS")
+        return self
 
     @property
     def allowed_hosts(self) -> list[str]:

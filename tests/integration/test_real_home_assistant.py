@@ -1,10 +1,12 @@
 import os
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from ambient_ha.config import Settings
 from ambient_ha.ha.client import HomeAssistantClient
 from ambient_ha.models.discovery import EntitySearchFilters
+from ambient_ha.models.history import RecentChangesFilters
 
 
 @pytest.mark.integration
@@ -26,3 +28,19 @@ async def test_real_home_assistant_connection() -> None:
     assert entities.returned <= 1
     assert isinstance(areas_supported, bool)
     assert isinstance(floors_supported, bool)
+
+    if entities.entities:
+        entity_id = entities.entities[0].entity_id
+        start = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+        found, history = await client.get_entity_history(
+            entity_id, start=start, end=None, limit=5, minimal_response=True
+        )
+        logbook = await client.get_logbook(start=start, end=None, entity_id=entity_id, limit=5)
+        changes = await client.get_recent_changes(
+            RecentChangesFilters(entity_id=entity_id, duration_minutes=60, limit=5)
+        )
+
+        assert found is True
+        assert history.returned <= 5
+        assert logbook.returned <= 5
+        assert changes.returned <= 5

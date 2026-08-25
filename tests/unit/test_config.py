@@ -15,6 +15,11 @@ def test_required_configuration_and_defaults() -> None:
     assert settings.log_level == "INFO"
     assert settings.read_only is True
     assert settings.registry_cache_ttl_seconds == 60
+    assert settings.history_default_lookback_hours == 24
+    assert settings.history_max_lookback_hours == 168
+    assert settings.history_default_limit == 100
+    assert settings.history_max_events == 500
+    assert settings.history_max_entities == 50
 
 
 @pytest.mark.parametrize("ttl", [4, 3601])
@@ -24,6 +29,40 @@ def test_registry_cache_ttl_is_bounded(ttl: int) -> None:
             HOME_ASSISTANT_URL="http://homeassistant.local:8123",
             HOME_ASSISTANT_TOKEN="secret",
             REGISTRY_CACHE_TTL_SECONDS=ttl,
+        )
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("HISTORY_DEFAULT_LOOKBACK_HOURS", 0),
+        ("HISTORY_MAX_LOOKBACK_HOURS", 721),
+        ("HISTORY_MAX_EVENTS", 0),
+        ("HISTORY_MAX_ENTITIES", 101),
+    ],
+)
+def test_history_bounds_are_validated(name: str, value: int) -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            HOME_ASSISTANT_URL="http://homeassistant.local:8123",
+            HOME_ASSISTANT_TOKEN="secret",
+            **{name: value},
+        )
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"HISTORY_DEFAULT_LOOKBACK_HOURS": 25, "HISTORY_MAX_LOOKBACK_HOURS": 24},
+        {"HISTORY_DEFAULT_LIMIT": 101, "HISTORY_MAX_EVENTS": 100},
+    ],
+)
+def test_history_defaults_cannot_exceed_hard_bounds(overrides: dict[str, int]) -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            HOME_ASSISTANT_URL="http://homeassistant.local:8123",
+            HOME_ASSISTANT_TOKEN="secret",
+            **overrides,
         )
 
 

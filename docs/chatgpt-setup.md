@@ -3,9 +3,10 @@
 ## Local verification
 
 Start the bridge and test `http://127.0.0.1:8000/mcp` with MCP Inspector before
-involving ChatGPT. Verify that all tools appear, discovery returns structured
-data, an invalid token produces `authentication_failed`, and no response contains
-tokens, private URLs, camera streams, coordinates, or raw configuration.
+involving ChatGPT. Verify that all tools appear, discovery and historical reads
+return structured data, an invalid token produces `authentication_failed`, and no
+response contains tokens, private URLs, camera streams, coordinates, raw
+configuration, or raw historical attributes.
 
 ```bash
 npx @modelcontextprotocol/inspector@latest
@@ -50,4 +51,6 @@ plugins use reviewed metadata snapshots and have a separate update process.
 - "Find the garage lights."
 - "Which entities are unavailable upstairs?"
 - "Summarize the current states in the cover domain."
+- "Show the recorded changes for the kitchen lights during the last hour."
+- "What does the logbook say about light.kitchen_ceiling since 09:00Z?"
 - "Turn off the kitchen lights." (Expected: no matching control tool.)

@@ -5,13 +5,16 @@ from __future__ import annotations
 import ssl
 from collections.abc import Mapping
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import httpx
 
 from ambient_ha.ha.exceptions import (
     HomeAssistantAuthenticationError,
+    HomeAssistantError,
     HomeAssistantInvalidURL,
+    HomeAssistantLogbookUnavailable,
+    HomeAssistantRecorderUnavailable,
     HomeAssistantTimeoutError,
     HomeAssistantTLSFailure,
     HomeAssistantUnexpectedResponse,
@@ -68,6 +71,43 @@ class HomeAssistantRestAPI:
             )
         return payload
 
+    async def get_history(
+        self,
+        *,
+        entity_ids: list[str],
+        start: str,
+        end: str,
+        minimal_response: bool,
+    ) -> list[Any]:
+        """Read one bounded recorder history window through the official REST API."""
+        query = urlencode({"filter_entity_id": ",".join(entity_ids), "end_time": end})
+        if minimal_response:
+            query = f"{query}&minimal_response"
+        payload = await self._request_json(
+            f"/api/history/period/{quote(start, safe='')}?{query}",
+            unavailable_error=HomeAssistantRecorderUnavailable,
+        )
+        if not isinstance(payload, list):
+            raise HomeAssistantUnexpectedResponse(
+                "Home Assistant returned historical state data in an unexpected shape."
+            )
+        return payload
+
+    async def get_logbook(self, *, start: str, end: str, entity_id: str | None) -> list[Any]:
+        """Read one bounded logbook window through the official REST API."""
+        query_values = {"end_time": end}
+        if entity_id is not None:
+            query_values["entity"] = entity_id
+        payload = await self._request_json(
+            f"/api/logbook/{quote(start, safe='')}?{urlencode(query_values)}",
+            unavailable_error=HomeAssistantLogbookUnavailable,
+        )
+        if not isinstance(payload, list):
+            raise HomeAssistantUnexpectedResponse(
+                "Home Assistant returned logbook data in an unexpected shape."
+            )
+        return payload
+
     async def _get_json(self, path: str) -> Mapping[str, Any]:
         payload = await self._request_json(path)
         if not isinstance(payload, dict):
@@ -76,7 +116,13 @@ class HomeAssistantRestAPI:
             )
         return payload
 
-    async def _request_json(self, path: str, *, allow_not_found: bool = False) -> Any:
+    async def _request_json(
+        self,
+        path: str,
+        *,
+        allow_not_found: bool = False,
+        unavailable_error: type[HomeAssistantError] | None = None,
+    ) -> Any:
         headers = {
             "Authorization": f"Bearer {self._token}",
             "Accept": "application/json",
@@ -115,6 +161,10 @@ class HomeAssistantRestAPI:
             )
         if response.status_code == 404 and allow_not_found:
             return None
+        if unavailable_error is not None and response.status_code in {404, 500, 503}:
+            raise unavailable_error(
+                "Home Assistant historical data is not available on this installation."
+            )
         if response.status_code < 200 or response.status_code >= 300:
             raise HomeAssistantUnexpectedResponse(
                 f"Home Assistant returned unexpected HTTP status {response.status_code}."

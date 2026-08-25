@@ -32,9 +32,9 @@ installation data.
 ### Semantic tool services
 
 Represent user goals such as diagnosing connectivity, resolving an entity,
-searching a home's semantic inventory, and summarizing areas or floors. Later
-tools should follow the same pattern: `get_home_summary`, `get_entity_history`,
-`get_recent_changes`, and narrowly scoped controls. A generic `call_ha_api` or
+searching a home's semantic inventory, reading recorded facts, and summarizing
+areas or floors. Later tools should follow the same pattern: `get_home_summary`,
+and narrowly scoped controls. A generic `call_ha_api` or
 `call_service` tool is explicitly outside the architecture.
 
 ### Policy engine
@@ -49,6 +49,7 @@ entity/domain allowlists, location/area rules, time constraints, and audit data.
 Is the semantic facade used by application services. It coordinates:
 
 - REST for fresh current-state snapshots and selected safe metadata;
+- REST for official Recorder history and logbook reads; and
 - WebSocket for entity, device, area, and floor registry snapshots; and
 - Home Assistant MCP/Assist only where its semantics are useful.
 
@@ -88,6 +89,23 @@ is deterministic.
 
 Registry command absence is feature-local: older installations can return
 `supported: false` for floors or areas without collapsing unrelated discovery.
+
+## Historical request flow
+
+Phase 3 uses the official read-only REST endpoints `GET /api/history/period` and
+`GET /api/logbook`. `HomeAssistantClient` validates offset-aware ISO-8601 windows,
+applies the configured lookback/event/entity bounds, makes one bulk history request
+for aggregate changes, and normalizes the response before a tool sees it. No
+historical data is cached.
+
+Recorder results can be partial because retention, exclusions, purges, and disabled
+Recorder/logbook components are normal installation conditions. Empty history is a
+successful factual result. State duration is emitted only when both the beginning
+and the next recorded boundary are inside the requested window.
+
+The normalizer preserves opaque state/logbook context IDs and parent IDs for a
+future causality layer, but Phase 3 neither resolves them nor explains why an event
+happened. Context user identifiers are not returned.
 
 ## Health semantics
 

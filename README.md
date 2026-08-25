@@ -4,9 +4,9 @@ Ambient Home Assistant MCP is a secure, semantic bridge that gives ChatGPT and
 other MCP clients purpose-built access to Home Assistant. It is the server
 foundation for the future user-facing **Ambient Home Assistant** application.
 
-> **Phase 2 status:** local/private and read-only. This release adds semantic
-> entity discovery, current state, areas, floors, and domain summaries. It cannot
-> control devices or change Home Assistant.
+> **Phase 3 status:** local/private and read-only. This release adds recorded
+> state history, logbook facts, and recent-change queries. It cannot control
+> devices or change Home Assistant.
 
 ## What it is—and what it is not
 
@@ -52,6 +52,9 @@ See [the architecture decision record](docs/architecture.md).
 | `ha_list_areas` / `ha_get_area` | Lists compact areas or gets one area with domain counts and an optional bounded entity list. |
 | `ha_list_floors` / `ha_get_floor` | Lists floors or gets one floor with area and domain aggregates. |
 | `ha_domain_summary` | Summarizes observed states and availability for any entity domain. |
+| `ha_get_entity_history` | Returns bounded recorded state transitions and only proven state durations. |
+| `ha_get_logbook` | Returns bounded, privacy-filtered recorded logbook facts. |
+| `ha_get_recent_changes` | Finds recorded state changes by time, area, floor, domain, or entity. |
 | `GET /health` | Reports application liveness and separate Home Assistant readiness. |
 
 No service calls, state changes, or administrative endpoints are implemented.
@@ -67,6 +70,9 @@ No service calls, state changes, or administrative endpoints are implemented.
   sources, tokens, credentials, coordinates, and location-bearing metadata.
 - Current states are never cached. Registry metadata uses one bounded 60-second
   TTL cache to avoid repeated WebSocket authentication and registry reads.
+- Historical queries use Home Assistant Recorder data, remain uncached, and are
+  bounded to a 24-hour default / 7-day maximum window, 500 events, and 50
+  aggregate candidate entities by default.
 - MCP transport Host and Origin allowlists protect against DNS rebinding.
 - The policy engine allows reads and fails closed for every control class.
 - The container runs as a non-root user with a read-only filesystem in Compose.

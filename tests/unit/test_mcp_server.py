@@ -7,6 +7,12 @@ from ambient_ha.config import Settings
 from ambient_ha.ha.discovery import DiscoveryResolver
 from ambient_ha.models import ConnectionStatus, HomeAssistantServerInfo
 from ambient_ha.models.discovery import EntitySearchFilters
+from ambient_ha.models.history import (
+    EntityHistoryPage,
+    LogbookPage,
+    RecentChangesFilters,
+    RecentChangesPage,
+)
 from ambient_ha.server import build_mcp_server
 from tests.fixtures.discovery import REGISTRIES, STATES
 
@@ -48,6 +54,38 @@ class FakeGateway:
 
     async def get_domain_summary(self, domain: str):
         return self.resolver.domain_summary(STATES, domain)
+
+    async def get_entity_history(self, entity_id: str, **_kwargs: object):
+        return True, EntityHistoryPage(
+            entity_id=entity_id,
+            start="2026-08-25T12:00:00+00:00",
+            end="2026-08-25T12:30:00+00:00",
+            total_transitions=0,
+            returned=0,
+            limit=100,
+            truncated=False,
+        )
+
+    async def get_logbook(self, **_kwargs: object):
+        return LogbookPage(
+            start="2026-08-25T12:00:00+00:00",
+            end="2026-08-25T12:30:00+00:00",
+            total_entries=0,
+            returned=0,
+            limit=100,
+            truncated=False,
+        )
+
+    async def get_recent_changes(self, filters: RecentChangesFilters):
+        return RecentChangesPage(
+            start="2026-08-25T12:00:00+00:00",
+            end="2026-08-25T12:30:00+00:00",
+            candidate_entities=0,
+            total_changes=0,
+            returned=0,
+            limit=filters.limit or 100,
+            truncated=False,
+        )
 
 
 @pytest.mark.anyio
@@ -123,3 +161,23 @@ async def test_mcp_discovery_tools_are_registered_and_callable(settings: Setting
     assert floors.structured_content["floors"][0]["floor_id"] == "lower_level"
     assert floor.structured_content["floor"]["entity_count"] == 6
     assert summary.structured_content["summary"]["unknown"] == 1
+
+
+@pytest.mark.anyio
+async def test_mcp_history_tools_are_registered_and_callable(settings: Settings) -> None:
+    server = build_mcp_server(settings, client=FakeGateway())
+
+    async with Client(server) as client:
+        listed = await client.list_tools()
+        history = await client.call_tool(
+            "ha_get_entity_history",
+            {"entity_id": "light.kitchen_ceiling", "start": "2026-08-25T12:00:00Z"},
+        )
+        logbook = await client.call_tool("ha_get_logbook", {"start": "2026-08-25T12:00:00Z"})
+        changes = await client.call_tool("ha_get_recent_changes", {"duration_minutes": 30})
+
+    names = {tool.name for tool in listed.tools}
+    assert {"ha_get_entity_history", "ha_get_logbook", "ha_get_recent_changes"} <= names
+    assert history.structured_content["found"] is True
+    assert logbook.structured_content["logbook"]["returned"] == 0
+    assert changes.structured_content["changes"]["candidate_entities"] == 0
