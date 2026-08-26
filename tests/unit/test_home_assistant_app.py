@@ -53,6 +53,17 @@ def test_container_uses_runtime_selecting_launcher() -> None:
     assert "USER ambient" in dockerfile
 
 
+def test_app_build_workflow_normalizes_quoted_metadata() -> None:
+    workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "home-assistant-app.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "version: ${{ steps.normalize.outputs.version }}" in workflow
+    assert 'image="${APP_IMAGE//\\"/}"' in workflow
+    assert 'version="${APP_VERSION//\\"/}"' in workflow
+    assert 'echo "version=${version}" >> "${GITHUB_OUTPUT}"' in workflow
+
+
 def test_phase_6_5_default_policy_denies_every_non_read_operation() -> None:
     engine = PolicyEngine(PolicyConfig(read_only=True))
 

@@ -29,7 +29,7 @@ jobs:
       name: ${{ steps.info.outputs.name }}
       registry_prefix: ${{ steps.normalize.outputs.registry_prefix }}
       url: ${{ steps.info.outputs.url }}
-      version: ${{ steps.info.outputs.version }}
+      version: ${{ steps.normalize.outputs.version }}
     steps:
       - uses: actions/checkout@v7.0.1
       - name: Read App information
@@ -41,9 +41,23 @@ jobs:
         id: normalize
         env:
           APP_IMAGE: ${{ steps.info.outputs.image }}
+          APP_VERSION: ${{ steps.info.outputs.version }}
         run: |
-          echo "image_name=${APP_IMAGE##*/}" >> "${GITHUB_OUTPUT}"
-          echo "registry_prefix=${APP_IMAGE%/*}" >> "${GITHUB_OUTPUT}"
+          image="${APP_IMAGE//\"/}"
+          version="${APP_VERSION//\"/}"
+
+          if [[ ! "${image}" =~ ^ghcr\.io/[a-z0-9._/-]+$ ]]; then
+            echo "Invalid App image metadata" >&2
+            exit 1
+          fi
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid App version metadata" >&2
+            exit 1
+          fi
+
+          echo "image_name=${image##*/}" >> "${GITHUB_OUTPUT}"
+          echo "registry_prefix=${image%/*}" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
       - name: Prepare architecture matrix
         id: matrix
         uses: home-assistant/builder/actions/prepare-multi-arch-matrix@2026.06.0
