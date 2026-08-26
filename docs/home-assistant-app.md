@@ -2,15 +2,16 @@
 
 ## Current status
 
-The `0.6.6` package is an experimental Home Assistant App (formerly add-on) for
+The `0.6.7` package is an experimental Home Assistant App (formerly add-on) for
 `amd64` and `aarch64`. Its versioned multi-architecture image is published by the
 main-branch release workflow and must be publicly pullable before installation. It
 is read only and exposes the same 24 tools as
 standalone Ambient MCP. Version `0.6.5` installed but could not start because its
 non-root entrypoint could not read Supervisor's root-only options file. `0.6.6`
-adds a minimal root bootstrap and drops to the non-root runtime identity
-before the server starts. Corrected live startup validation is outstanding; do not
-treat the package as production validated yet.
+corrected startup, then live validation exposed an incorrect WebSocket route through
+the Supervisor proxy. `0.6.7` explicitly selects the documented Supervisor
+WebSocket endpoint. Complete live validation is outstanding; do not treat the
+package as production validated yet.
 
 ## Prerequisites
 
@@ -19,7 +20,7 @@ treat the package as production validated yet.
 - Network access from Home Assistant Supervisor to GitHub and GHCR.
 
 The version-aligned release image is
-`ghcr.io/ambient-home-systems/ambient-ha-mcp:0.6.6`. It becomes installable after
+`ghcr.io/ambient-home-systems/ambient-ha-mcp:0.6.7`. It becomes installable after
 the main-branch publication workflow completes. Home Assistant selects the matching
 architecture from its multi-architecture manifest.
 
@@ -34,7 +35,7 @@ Use the standalone Docker/Python route on those installation types.
 3. Select **Add**, close the repository dialog, and refresh the App store.
 4. Select **Ambient Home Assistant MCP**. If it does not appear, use **Check for
    updates** in the store menu and refresh the browser once.
-5. Install version `0.6.6`.
+5. Install version `0.6.7`.
 6. Review Configuration. Do not add a token; no token option exists.
 7. Leave `8000/tcp` disabled, start the App, and enable start-on-boot behavior as
    appropriate for the test host.
@@ -43,6 +44,10 @@ Use the standalone Docker/Python route on those installation types.
 
 Supervisor provides `SUPERVISOR_TOKEN` and the App uses the official Core proxy.
 Missing Supervisor authentication causes a sanitized startup failure.
+
+The launcher configures REST through `http://supervisor/core` and WebSocket through
+`ws://supervisor/core/websocket`. Standalone deployments do not receive this
+override and continue to derive `/api/websocket` from `HOME_ASSISTANT_URL`.
 
 Supervisor stores `/data/options.json` for root-only access. The App entrypoint
 reads and validates that file during a short root bootstrap, then initializes the
@@ -94,7 +99,7 @@ repository. Configuration contains no credentials and no Ambient database.
 ## Troubleshooting
 
 - **Image not found/unauthorized:** confirm the versioned GHCR image exists and the
-  package is public. Version `0.6.6` is expected at the exact image shown above.
+  package is public. Version `0.6.7` is expected at the exact image shown above.
 - **Unsupported architecture:** this release supports only `amd64` and `aarch64`.
   It will not install on `armv7`, `armhf`, or `i386` systems.
 - **App does not appear:** confirm the repository URL is exact, run **Check for
@@ -109,7 +114,9 @@ repository. Configuration contains no credentials and no Ambient database.
   Ambient App. Unknown options and invalid bounds intentionally fail closed.
 - **Installed but immediately stops with no App log:** inspect **Settings → System
   → Logs → Supervisor** for the container exit category. Version `0.6.5` has a
-  known `/data/options.json` permission defect; install `0.6.6` or later. Do not
+  known `/data/options.json` permission defect; install `0.6.6` or later. Version
+  `0.6.6` starts but uses the wrong Supervisor WebSocket proxy route; install
+  `0.6.7` for live discovery validation. Do not
   paste Supervisor tokens or private URLs into an issue.
 - **Health endpoint unreachable:** the App port is disabled by default. Confirm the
   App is running, then temporarily assign a trusted-LAN host port if HTTP validation

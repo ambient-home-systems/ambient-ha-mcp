@@ -11,6 +11,7 @@ def test_required_configuration_and_defaults() -> None:
     )
 
     assert settings.home_assistant_url == "http://homeassistant.local:8123"
+    assert settings.home_assistant_websocket_url is None
     assert settings.home_assistant_token.get_secret_value() == "secret"
     assert settings.log_level == "INFO"
     assert settings.read_only is True
@@ -86,6 +87,28 @@ def test_invalid_or_credentialed_url_is_rejected(url: str) -> None:
 def test_missing_token_is_rejected() -> None:
     with pytest.raises(ValidationError):
         Settings(HOME_ASSISTANT_URL="http://homeassistant.local:8123")  # type: ignore[call-arg]
+
+
+def test_explicit_websocket_url_is_validated() -> None:
+    settings = Settings(
+        HOME_ASSISTANT_URL="http://homeassistant.local:8123",
+        HOME_ASSISTANT_WEBSOCKET_URL="wss://ha.example.com/api/websocket/",
+        HOME_ASSISTANT_TOKEN="secret",
+    )
+
+    assert settings.home_assistant_websocket_url == "wss://ha.example.com/api/websocket"
+
+    for url in (
+        "https://ha.example.com/api/websocket",
+        "ws://user:password@ha.example.com/api/websocket",
+        "ws://ha.example.com/api/websocket?token=secret",
+    ):
+        with pytest.raises(ValidationError):
+            Settings(
+                HOME_ASSISTANT_URL="http://homeassistant.local:8123",
+                HOME_ASSISTANT_WEBSOCKET_URL=url,
+                HOME_ASSISTANT_TOKEN="secret",
+            )
 
 
 def test_allowlists_are_parsed_without_empty_entries() -> None:

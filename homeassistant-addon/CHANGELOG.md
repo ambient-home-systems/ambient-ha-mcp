@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.7
+
+- Fix App-mode registry and automation WebSocket access by using Supervisor's
+  documented `ws://supervisor/core/websocket` proxy.
+- Preserve standalone `/api/websocket` routing, Supervisor-token authentication,
+  the 24-tool read-only surface, and existing App permissions.
+
 ## 0.6.6
 
 - Fix Home Assistant startup by reading Supervisor's root-only options document

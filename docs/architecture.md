@@ -84,7 +84,8 @@ One container image and Python implementation serve both deployment modes. The
   `HOME_ASSISTANT_TOKEN` environment contract; and
 - `home_assistant_app` reads only allowlisted, bounded values from
   `/data/options.json`, obtains `SUPERVISOR_TOKEN` from the App environment, and
-  targets the official Core proxy at `http://supervisor/core`.
+  explicitly targets the official REST proxy at `http://supervisor/core` and
+  WebSocket proxy at `ws://supervisor/core/websocket`.
 
 Supervisor owns its App options document with root-only permissions. The image
 therefore starts a bounded bootstrap as container root, reads and validates the
@@ -96,8 +97,10 @@ runs as root.
 App mode overwrites any inherited Home Assistant URL/token, hard-forces
 `READ_ONLY=true`, clears `POLICY_FILE`, binds inside the isolated App network, and
 allows no browser origins. The Home Assistant App definition keeps its host port
-disabled by default. The same REST and WebSocket adapters therefore run unchanged
-through Supervisor's Core proxy; no parallel Home Assistant client exists.
+disabled by default. The same REST and WebSocket adapters use runtime-supplied
+transport endpoints through Supervisor's Core proxy; no parallel Home Assistant
+client exists. Standalone mode continues to derive `/api/websocket` from its
+configured HTTP(S) Home Assistant base URL.
 
 The App requests only `homeassistant_api`. It does not request Supervisor API,
 Docker, host networking, ingress, host filesystem maps, hardware privileges, or

@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     )
 
     home_assistant_url: str = Field(alias="HOME_ASSISTANT_URL")
+    home_assistant_websocket_url: str | None = Field(
+        default=None, alias="HOME_ASSISTANT_WEBSOCKET_URL"
+    )
     home_assistant_token: SecretStr = Field(min_length=1, alias="HOME_ASSISTANT_TOKEN")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO", alias="LOG_LEVEL"
@@ -71,6 +74,22 @@ class Settings(BaseSettings):
             raise ValueError("HOME_ASSISTANT_URL must not contain credentials")
         if parsed.query or parsed.fragment:
             raise ValueError("HOME_ASSISTANT_URL must not contain a query or fragment")
+        return cleaned
+
+    @field_validator("home_assistant_websocket_url")
+    @classmethod
+    def validate_home_assistant_websocket_url(cls, value: str | None) -> str | None:
+        """Validate an optional explicit Home Assistant WebSocket endpoint."""
+        if value is None:
+            return None
+        cleaned = value.strip().rstrip("/")
+        parsed = urlsplit(cleaned)
+        if parsed.scheme not in {"ws", "wss"} or not parsed.hostname:
+            raise ValueError("HOME_ASSISTANT_WEBSOCKET_URL must be an absolute ws(s) URL")
+        if parsed.username or parsed.password:
+            raise ValueError("HOME_ASSISTANT_WEBSOCKET_URL must not contain credentials")
+        if parsed.query or parsed.fragment:
+            raise ValueError("HOME_ASSISTANT_WEBSOCKET_URL must not contain a query or fragment")
         return cleaned
 
     @model_validator(mode="after")

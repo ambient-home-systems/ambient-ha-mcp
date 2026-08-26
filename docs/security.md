@@ -64,6 +64,10 @@ Those omissions are explicit: public exposure and all writes remain unsupported.
 Set `HOME_ASSISTANT_TOKEN` at runtime. The settings model stores it as a Pydantic
 `SecretStr`; code reveals it only when constructing the Home Assistant
 `Authorization` header. The token is never part of a tool result or exception.
+An optional `HOME_ASSISTANT_WEBSOCKET_URL` selects only the transport endpoint and
+must be a credential-free `ws://` or `wss://` URL. Home Assistant App mode supplies
+the fixed Supervisor endpoint internally and continues to use the in-memory
+`SUPERVISOR_TOKEN` for the standard WebSocket authentication exchange.
 
 Do not commit:
 

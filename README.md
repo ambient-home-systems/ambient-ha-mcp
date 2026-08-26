@@ -4,12 +4,12 @@ Ambient Home Assistant MCP is a secure, semantic bridge that gives ChatGPT and
 other MCP clients purpose-built access to Home Assistant. It is the server
 foundation for the future user-facing **Ambient Home Assistant** application.
 
-> **Phase 6.6 status:** live installation of `0.6.5` exposed a startup defect:
-> Supervisor's root-only App options file was unreadable by the image's original
-> non-root entrypoint. Version `0.6.6` corrects the bootstrap while keeping the
-> long-running server unprivileged. App mode remains local/private and read-only,
-> uses Supervisor authentication, and exposes only the 24 read tools. Corrected
-> startup and complete live validation on the real host remain outstanding.
+> **Phase 6.6 status:** live installation confirms that `0.6.6` starts and its REST
+> authentication succeeds, but exposed incorrect standalone-style WebSocket URL
+> derivation for the Supervisor proxy. Version `0.6.7` supplies Supervisor's
+> documented WebSocket endpoint explicitly. App mode remains local/private and
+> read-only, uses Supervisor authentication, and exposes only the 24 read tools.
+> Upgrade and complete live validation on the real host remain outstanding.
 > **NO-GO FOR PHASE 7** until that validation passes.
 
 ## What it is—and what it is not
@@ -133,6 +133,11 @@ uv sync --all-extras
 uv run ambient-ha-mcp
 ```
 
+Standalone HTTP(S) URLs derive the standard Home Assistant `/api/websocket`
+endpoint. Gateways with a distinct route may set the optional, credential-free
+`HOME_ASSISTANT_WEBSOCKET_URL`. App mode sets Supervisor's documented endpoint
+internally; it is not an App option.
+
 The Streamable HTTP MCP endpoint is `http://127.0.0.1:8000/mcp`; health is at
 `http://127.0.0.1:8000/health`.
 
@@ -148,7 +153,7 @@ Then connect the Inspector to `http://127.0.0.1:8000/mcp`.
 
 The repository now contains a Home Assistant App definition for `amd64` and
 `aarch64`. The versioned multi-architecture release image is
-`ghcr.io/ambient-home-systems/ambient-ha-mcp:0.6.6`; it becomes installable after
+`ghcr.io/ambient-home-systems/ambient-ha-mcp:0.6.7`; it becomes installable after
 the main-branch publication workflow completes, and the App configuration uses that
 exact version rather than relying only on `latest`.
 
@@ -159,7 +164,8 @@ exact version rather than relying only on `latest`.
 4. Start the App and check its log and container health.
 
 Supervisor supplies a short-lived token and the App connects through
-`http://supervisor/core`; no Home Assistant URL or token appears in App options.
+the documented REST and WebSocket Core proxies; no Home Assistant URL or token
+appears in App options.
 The launcher hard-forces `READ_ONLY=true` and ignores any external policy file.
 See [Home Assistant App installation](docs/home-assistant-app.md) for exact setup,
 upgrade, rollback, troubleshooting, and security guidance. Record real-installation

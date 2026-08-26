@@ -25,6 +25,7 @@ def test_app_runtime_uses_supervisor_auth_and_forces_read_only(tmp_path: Path) -
     environ = {
         "SUPERVISOR_TOKEN": "supervisor-secret",
         "HOME_ASSISTANT_URL": "https://untrusted.example",
+        "HOME_ASSISTANT_WEBSOCKET_URL": "wss://untrusted.example/api/websocket",
         "HOME_ASSISTANT_TOKEN": "old-token",
         "READ_ONLY": "false",
         "MCP_HOST": "127.0.0.1",
@@ -34,6 +35,8 @@ def test_app_runtime_uses_supervisor_auth_and_forces_read_only(tmp_path: Path) -
     launcher.configure_home_assistant_app_environment(options_path=options_path, environ=environ)
 
     assert environ["HOME_ASSISTANT_URL"] == "http://supervisor/core"
+    assert environ["HOME_ASSISTANT_WEBSOCKET_URL"] == "ws://supervisor/core/websocket"
+    assert environ["HOME_ASSISTANT_WEBSOCKET_URL"] != "ws://supervisor/core/api/websocket"
     assert environ["HOME_ASSISTANT_TOKEN"] == "supervisor-secret"
     assert environ["READ_ONLY"] == "true"
     assert environ["MCP_HOST"] == "0.0.0.0"  # noqa: S104

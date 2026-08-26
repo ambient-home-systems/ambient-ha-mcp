@@ -94,8 +94,15 @@ class AutomationProvider(Protocol):
 class HomeAssistantWebSocketAPI:
     """Open a short-lived authenticated socket and read registry snapshots."""
 
-    def __init__(self, *, base_url: str, token: str, timeout_seconds: float) -> None:
-        self._url = _websocket_url(base_url)
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        token: str,
+        timeout_seconds: float,
+        websocket_url: str | None = None,
+    ) -> None:
+        self._url = websocket_url or _websocket_url(base_url)
         self._token = token
         self._timeout = timeout_seconds
 
