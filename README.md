@@ -4,13 +4,13 @@ Ambient Home Assistant MCP is a secure, semantic bridge that gives ChatGPT and
 other MCP clients purpose-built access to Home Assistant. It is the server
 foundation for the future user-facing **Ambient Home Assistant** application.
 
-> **Phase 6.5 status:** installable Home Assistant App packaging is implemented,
-> while the server remains local/private and read-only. App mode authenticates to
-> Core through Supervisor and never asks the operator for a long-lived token. It
-> adds no write tool, action executor, or Home Assistant service call; all 24 MCP
-> tools remain read-only. Live real-installation and Supervisor installation
-> validation is still outstanding because credentials and a Home Assistant test
-> host were unavailable. **NO-GO FOR PHASE 7** until that validation passes.
+> **Phase 6.6 status:** live installation of `0.6.5` exposed a startup defect:
+> Supervisor's root-only App options file was unreadable by the image's original
+> non-root entrypoint. Version `0.6.6` corrects the bootstrap while keeping the
+> long-running server unprivileged. App mode remains local/private and read-only,
+> uses Supervisor authentication, and exposes only the 24 read tools. Corrected
+> startup and complete live validation on the real host remain outstanding.
+> **NO-GO FOR PHASE 7** until that validation passes.
 
 ## What it is—and what it is not
 
@@ -113,7 +113,9 @@ No service calls, state changes, or administrative endpoints are implemented.
   unverified server-challenge concept until a later execution phase.
 - Audit events are bounded and recursively redact credentials, webhooks, URLs,
   messages, commands, camera streams, and other secret-bearing service data.
-- The container runs as a non-root user with a read-only filesystem in Compose.
+- Compose starts directly as a non-root user with a read-only filesystem. In App
+  mode, a minimal root bootstrap reads Supervisor's root-only options file and then
+  drops to the non-root `ambient` user before starting the MCP server.
 
 Never commit `.env`, Home Assistant tokens, credentials, private URLs, or
 certificates. See [Security](docs/security.md) before any deployment work.
@@ -145,9 +147,10 @@ Then connect the Inspector to `http://127.0.0.1:8000/mcp`.
 ## Home Assistant App
 
 The repository now contains a Home Assistant App definition for `amd64` and
-`aarch64`. After the Phase 6.5 change is merged, the main-branch workflow builds
-and publishes the versioned multi-architecture image used by Supervisor. The GHCR
-package must be public before operators can install it from the App store.
+`aarch64`. The versioned multi-architecture release image is
+`ghcr.io/ambient-home-systems/ambient-ha-mcp:0.6.6`; it becomes installable after
+the main-branch publication workflow completes, and the App configuration uses that
+exact version rather than relying only on `latest`.
 
 1. Add `https://github.com/ambient-home-systems/ambient-ha-mcp` as a custom App
    repository.
@@ -159,7 +162,8 @@ Supervisor supplies a short-lived token and the App connects through
 `http://supervisor/core`; no Home Assistant URL or token appears in App options.
 The launcher hard-forces `READ_ONLY=true` and ignores any external policy file.
 See [Home Assistant App installation](docs/home-assistant-app.md) for exact setup,
-upgrade, rollback, troubleshooting, and security guidance.
+upgrade, rollback, troubleshooting, and security guidance. Record real-installation
+results in the [sanitized Phase 6.6 validation template](docs/phase-6-6-live-validation.md).
 
 ## Development commands
 
@@ -198,6 +202,7 @@ orchestrator does not restart a healthy bridge in a loop.
 - [ChatGPT setup and current limitations](docs/chatgpt-setup.md)
 - [Home Assistant App installation](docs/home-assistant-app.md)
 - [Phase 6.5 validation gate](docs/phase-6-5-validation.md)
+- [Phase 6.6 live-validation template](docs/phase-6-6-live-validation.md)
 
 ## License
 

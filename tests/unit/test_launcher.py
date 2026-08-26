@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -44,6 +45,66 @@ def test_app_runtime_uses_supervisor_auth_and_forces_read_only(tmp_path: Path) -
     assert environ["MCP_ALLOWED_HOSTS"] == "homeassistant.local,homeassistant.local:*"
     assert "POLICY_FILE" not in environ
     assert "supervisor-secret" not in options_path.read_text(encoding="utf-8")
+
+
+def test_container_bootstrap_drops_privileges_before_server(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity = {"uid": 0}
+    calls: list[tuple[object, ...]] = []
+    account = SimpleNamespace(pw_name="ambient", pw_uid=987, pw_gid=986, pw_dir="/app")
+
+    monkeypatch.setattr(launcher.os, "geteuid", lambda: identity["uid"])
+    monkeypatch.setattr(launcher.pwd, "getpwnam", lambda user: account)
+    monkeypatch.setattr(
+        launcher.os,
+        "initgroups",
+        lambda user, gid: calls.append(("initgroups", user, gid)),
+    )
+    monkeypatch.setattr(launcher.os, "setgid", lambda gid: calls.append(("setgid", gid)))
+
+    def fake_setuid(uid: int) -> None:
+        calls.append(("setuid", uid))
+        identity["uid"] = uid
+
+    monkeypatch.setattr(launcher.os, "setuid", fake_setuid)
+    environ = {launcher.RUNTIME_USER_ENVIRONMENT_KEY: "ambient", "HOME": "/root"}
+
+    launcher.drop_container_privileges(environ=environ)
+
+    assert calls == [
+        ("initgroups", "ambient", 986),
+        ("setgid", 986),
+        ("setuid", 987),
+    ]
+    assert environ["HOME"] == "/app"
+
+
+def test_container_bootstrap_rejects_runtime_user_override() -> None:
+    with pytest.raises(launcher.RuntimeConfigurationError, match="Invalid container runtime user"):
+        launcher.drop_container_privileges(environ={launcher.RUNTIME_USER_ENVIRONMENT_KEY: "root"})
+
+
+def test_app_launcher_configures_then_drops_privileges_before_starting_server(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setenv("AMBIENT_RUNTIME_MODE", launcher.APP_RUNTIME_MODE)
+    monkeypatch.setattr(
+        launcher,
+        "configure_home_assistant_app_environment",
+        lambda: calls.append("configure"),
+    )
+    monkeypatch.setattr(
+        launcher,
+        "drop_container_privileges",
+        lambda: calls.append("drop"),
+    )
+    monkeypatch.setattr(launcher, "server_main", lambda: calls.append("serve"))
+
+    launcher.main()
+
+    assert calls == ["configure", "drop", "serve"]
 
 
 def test_app_runtime_requires_supervisor_auth_without_disclosing_values(tmp_path: Path) -> None:

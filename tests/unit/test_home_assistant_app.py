@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import yaml
@@ -48,9 +49,12 @@ def test_home_assistant_app_metadata_is_safe_and_version_aligned() -> None:
 
 def test_container_uses_runtime_selecting_launcher() -> None:
     dockerfile = (REPOSITORY_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    compose = (REPOSITORY_ROOT / "compose.yaml").read_text(encoding="utf-8")
 
     assert 'CMD ["python", "-m", "ambient_ha.launcher"]' in dockerfile
-    assert "USER ambient" in dockerfile
+    assert "AMBIENT_RUNTIME_USER=ambient" in dockerfile
+    assert "USER ambient" not in dockerfile
+    assert "user: ambient" in compose
 
 
 def test_app_build_workflow_normalizes_quoted_metadata() -> None:
@@ -62,6 +66,14 @@ def test_app_build_workflow_normalizes_quoted_metadata() -> None:
     assert 'image="${APP_IMAGE//\\"/}"' in workflow
     assert 'version="${APP_VERSION//\\"/}"' in workflow
     assert 'echo "version=${version}" >> "${GITHUB_OUTPUT}"' in workflow
+
+
+def test_phase_6_6_report_lists_every_read_only_tool_once() -> None:
+    report = (REPOSITORY_ROOT / "docs" / "phase-6-6-live-validation.md").read_text(encoding="utf-8")
+    listed_tools = re.findall(r"^\| `(ha_[a-z0-9_]+)` \|", report, flags=re.MULTILINE)
+
+    assert len(listed_tools) == 24
+    assert len(set(listed_tools)) == 24
 
 
 def test_phase_6_5_default_policy_denies_every_non_read_operation() -> None:

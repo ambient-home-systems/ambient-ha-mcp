@@ -10,6 +10,7 @@ services:
     ports:
       - "127.0.0.1:${MCP_PORT:-8000}:${MCP_PORT:-8000}"
     restart: unless-stopped
+    user: ambient
     read_only: true
     tmpfs:
       - /tmp:size=16m,mode=1777
@@ -17,4 +18,3 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-

@@ -101,6 +101,19 @@ administrative permission to the MCP client.** Upstream capability and Ambient
 authorization are separate. Phase 6 hard-denies administrative operations without
 consulting token privilege.
 
+### App bootstrap identity
+
+Home Assistant Supervisor stores `/data/options.json` with root-only permissions.
+The App container starts as root only to read that bounded Supervisor-managed file.
+Before settings construction, network connections, or MCP serving, the launcher
+resolves the fixed `ambient` account, initializes its groups, sets its GID, then
+sets its UID. Failure to complete or verify the identity change aborts startup.
+The runtime user cannot be overridden to `root`. Standalone Compose starts as
+`ambient` directly and keeps all Linux capabilities dropped. This correction adds
+no App metadata privilege, host mapping, Supervisor API, or write operation. The
+separate container health probe also drops to `ambient` before making its loopback
+liveness request.
+
 ## Data minimization
 
 The upstream `/api/config` response can include precise location and filesystem

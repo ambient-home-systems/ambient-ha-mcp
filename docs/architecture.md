@@ -86,6 +86,13 @@ One container image and Python implementation serve both deployment modes. The
   `/data/options.json`, obtains `SUPERVISOR_TOKEN` from the App environment, and
   targets the official Core proxy at `http://supervisor/core`.
 
+Supervisor owns its App options document with root-only permissions. The image
+therefore starts a bounded bootstrap as container root, reads and validates the
+options, and then changes supplementary groups, GID, and UID to the fixed
+`ambient` account before the shared server starts. Compose bypasses the bootstrap
+identity by starting directly as `ambient`. Application request handling never
+runs as root.
+
 App mode overwrites any inherited Home Assistant URL/token, hard-forces
 `READ_ONLY=true`, clears `POLICY_FILE`, binds inside the isolated App network, and
 allows no browser origins. The Home Assistant App definition keeps its host port
