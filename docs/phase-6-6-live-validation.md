@@ -11,12 +11,12 @@ this report. Record counts, availability, and pass/fail results only.
 
 ## Current observed status
 
-Version `0.6.5` installed successfully on a real Supervisor host but stopped
-immediately when started; no App log was retained. Source inspection established
-that the image ran as `ambient` before reading Supervisor's root-only
-`/data/options.json`. Version `0.6.6` changes only this boundary: a minimal root
-bootstrap reads the bounded options and then drops to `ambient` before serving.
-Corrected live startup has not passed yet, so the gate remains closed.
+Version `0.6.6` installs, starts, remains running, and authenticates successfully
+through the Supervisor REST proxy on Home Assistant `2026.8.3`. Live
+`ha_list_areas` validation exposed a WebSocket routing defect: standalone
+`/api/websocket` derivation produced the wrong Supervisor proxy path. Version
+`0.6.7` explicitly configures `ws://supervisor/core/websocket`. Upgrade and
+WebSocket/live-tool retesting remain outstanding, so the gate remains closed.
 
 ## Operator preflight
 
@@ -24,7 +24,7 @@ Corrected live startup has not passed yet, so the gate remains closed.
 - [ ] Architecture is `amd64` or `aarch64`
 - [ ] Custom repository added:
       `https://github.com/ambient-home-systems/ambient-ha-mcp`
-- [ ] Ambient App version `0.6.6` offered
+- [ ] Ambient App version `0.6.7` offered
 - [ ] No Home Assistant token field appears in App configuration
 - [ ] App port remains disabled during initial startup
 - [ ] No router forwarding, public DNS, tunnel, or public reverse proxy configured
@@ -37,7 +37,7 @@ Corrected live startup has not passed yet, so the gate remains closed.
 | Home Assistant version | |
 | Installation type | OS / Supervised |
 | Host architecture | amd64 / aarch64 |
-| Ambient version | 0.6.6 |
+| Ambient version | 0.6.7 |
 | App repository visible | PASS / FAIL |
 | Versioned image pulled | PASS / FAIL |
 

@@ -14,6 +14,7 @@ from ambient_ha.server import main as server_main
 APP_RUNTIME_MODE: Final = "home_assistant_app"
 APP_OPTIONS_PATH: Final = Path("/data/options.json")
 SUPERVISOR_CORE_URL: Final = "http://supervisor/core"
+SUPERVISOR_WEBSOCKET_URL: Final = "ws://supervisor/core/websocket"
 MAX_OPTIONS_FILE_BYTES: Final = 64 * 1024
 CONTAINER_RUNTIME_USER: Final = "ambient"
 RUNTIME_USER_ENVIRONMENT_KEY: Final = "AMBIENT_RUNTIME_USER"
@@ -143,6 +144,7 @@ def configure_home_assistant_app_environment(
         )
 
     target["HOME_ASSISTANT_URL"] = SUPERVISOR_CORE_URL
+    target["HOME_ASSISTANT_WEBSOCKET_URL"] = SUPERVISOR_WEBSOCKET_URL
     target["HOME_ASSISTANT_TOKEN"] = supervisor_token
     target["READ_ONLY"] = "true"
     # The App network namespace is isolated; its host port remains disabled by default.

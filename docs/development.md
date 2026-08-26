@@ -87,7 +87,9 @@ single image build context. Its launcher preserves standalone behavior unless
 
 App mode reads `/data/options.json`, accepts only documented non-secret settings,
 requires `SUPERVISOR_TOKEN`, uses `http://supervisor/core`, and always forces
-read-only operation. Because Supervisor makes that options document root-only, the
+read-only operation. App runtime also supplies Supervisor's distinct
+`ws://supervisor/core/websocket` endpoint instead of standalone `/api/websocket`
+derivation. Because Supervisor makes that options document root-only, the
 image bootstrap reads it before dropping groups, GID, and UID to the fixed
 `ambient` account; the server then starts unprivileged. Compose starts as `ambient`
 directly. Tests validate bootstrap ordering, version alignment, architecture

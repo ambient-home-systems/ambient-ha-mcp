@@ -32,7 +32,23 @@ class FakeSocket:
 
 def test_websocket_url_preserves_base_path_and_selects_secure_scheme() -> None:
     assert _websocket_url("https://ha.example/base/") == "wss://ha.example/base/api/websocket"
-    assert _websocket_url("http://ha.local:8123") == "ws://ha.local:8123/api/websocket"
+    assert (
+        _websocket_url("http://homeassistant.local:8123")
+        == "ws://homeassistant.local:8123/api/websocket"
+    )
+    assert _websocket_url("https://ha.example.com") == "wss://ha.example.com/api/websocket"
+
+
+def test_explicit_supervisor_websocket_url_bypasses_standalone_derivation() -> None:
+    api = HomeAssistantWebSocketAPI(
+        base_url="http://supervisor/core",
+        websocket_url="ws://supervisor/core/websocket",
+        token="secret",
+        timeout_seconds=1,
+    )
+
+    assert api._url == "ws://supervisor/core/websocket"
+    assert api._url != "ws://supervisor/core/api/websocket"
 
 
 @pytest.mark.anyio

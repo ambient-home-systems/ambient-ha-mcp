@@ -246,6 +246,7 @@ class HomeAssistantClient:
         )
         websocket_api = HomeAssistantWebSocketAPI(
             base_url=settings.home_assistant_url,
+            websocket_url=settings.home_assistant_websocket_url,
             token=settings.home_assistant_token.get_secret_value(),
             timeout_seconds=settings.request_timeout_seconds,
         )

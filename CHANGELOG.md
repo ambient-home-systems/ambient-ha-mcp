@@ -6,6 +6,24 @@ on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-08-26
+
+### Fixed
+
+- Route App-mode WebSocket reads through Supervisor's documented
+  `ws://supervisor/core/websocket` proxy instead of deriving the standalone
+  `/api/websocket` path from the REST proxy base URL.
+- Preserve standalone HTTP and HTTPS derivation at `/api/websocket` while allowing
+  runtime adapters to provide an explicit, validated WebSocket endpoint.
+
+### Security
+
+- Continue using only the in-memory `SUPERVISOR_TOKEN` for the standard Home
+  Assistant WebSocket authentication exchange. No long-lived-token fallback,
+  service call, control tool, or additional App permission was added.
+- Keep the Phase 7 gate closed pending upgrade and completion of the live read-only
+  validation matrix on the real Home Assistant installation.
+
 ## [0.6.6] - 2026-08-25
 
 ### Fixed
