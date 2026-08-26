@@ -6,6 +6,17 @@ on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-08-25
+
+### Fixed
+
+- Correct the real Home Assistant App startup failure caused by the `0.6.5`
+  non-root entrypoint being unable to read Supervisor's root-only
+  `/data/options.json` document.
+- Use a minimal root bootstrap to read bounded App configuration, then drop
+  supplementary groups, GID, and UID to the fixed `ambient` account before the MCP
+  server starts. Standalone Compose continues to start directly as `ambient`.
+
 ### Documentation
 
 - Record successful public publication of the versioned `0.6.5` Home Assistant App
@@ -14,6 +25,9 @@ on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 
 ### Security
 
+- Add no App privileges, host mappings, Supervisor API scope, write paths, service
+  calls, or MCP tools. Startup fails closed if the unprivileged identity cannot be
+  entered and verified.
 - Preserve the mandatory `NO-GO FOR PHASE 7` decision until real Supervisor
   installation, live privacy inspection, and read-only integration validation pass.
 

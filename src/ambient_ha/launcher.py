@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import pwd
 from collections.abc import MutableMapping
 from pathlib import Path
 from typing import Any, Final
@@ -14,6 +15,8 @@ APP_RUNTIME_MODE: Final = "home_assistant_app"
 APP_OPTIONS_PATH: Final = Path("/data/options.json")
 SUPERVISOR_CORE_URL: Final = "http://supervisor/core"
 MAX_OPTIONS_FILE_BYTES: Final = 64 * 1024
+CONTAINER_RUNTIME_USER: Final = "ambient"
+RUNTIME_USER_ENVIRONMENT_KEY: Final = "AMBIENT_RUNTIME_USER"
 
 _OPTION_ENVIRONMENT_KEYS: Final = {
     "log_level": "LOG_LEVEL",
@@ -33,6 +36,35 @@ _LIST_OPTIONS: Final = {"ignored_diagnostic_entities", "mcp_allowed_hosts"}
 
 class RuntimeConfigurationError(RuntimeError):
     """Raised when a runtime environment is incomplete or unsafe."""
+
+
+def drop_container_privileges(*, environ: MutableMapping[str, str] | None = None) -> None:
+    """Drop a container root bootstrap to the fixed unprivileged runtime user.
+
+    Home Assistant Supervisor writes ``/data/options.json`` for root-only access.
+    The App therefore has to read its managed options before calling this helper.
+    The server itself never needs to run as root.
+    """
+    target = os.environ if environ is None else environ
+    configured_user = target.get(RUNTIME_USER_ENVIRONMENT_KEY)
+    if configured_user is None:
+        return
+    if configured_user != CONTAINER_RUNTIME_USER:
+        raise RuntimeConfigurationError("Invalid container runtime user")
+    if os.geteuid() != 0:
+        return
+
+    try:
+        account = pwd.getpwnam(CONTAINER_RUNTIME_USER)
+        os.initgroups(account.pw_name, account.pw_gid)
+        os.setgid(account.pw_gid)
+        os.setuid(account.pw_uid)
+    except (KeyError, OSError) as exc:
+        raise RuntimeConfigurationError("Unable to enter the unprivileged runtime") from exc
+
+    if os.geteuid() != account.pw_uid:
+        raise RuntimeConfigurationError("Unable to enter the unprivileged runtime")
+    target["HOME"] = account.pw_dir
 
 
 def _read_app_options(path: Path) -> dict[str, Any]:
@@ -130,6 +162,10 @@ def main() -> None:
             raise SystemExit(f"Ambient MCP startup failed: {exc}") from exc
     elif runtime_mode != "standalone":
         raise SystemExit("Ambient MCP startup failed: unsupported runtime mode")
+    try:
+        drop_container_privileges()
+    except RuntimeConfigurationError as exc:
+        raise SystemExit(f"Ambient MCP startup failed: {exc}") from exc
     server_main()
 
 

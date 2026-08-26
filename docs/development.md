@@ -87,9 +87,12 @@ single image build context. Its launcher preserves standalone behavior unless
 
 App mode reads `/data/options.json`, accepts only documented non-secret settings,
 requires `SUPERVISOR_TOKEN`, uses `http://supervisor/core`, and always forces
-read-only operation. Tests validate version alignment, architecture metadata,
-disabled network exposure, denied privileges, missing-token failure, option bounds,
-and default policy denial.
+read-only operation. Because Supervisor makes that options document root-only, the
+image bootstrap reads it before dropping groups, GID, and UID to the fixed
+`ambient` account; the server then starts unprivileged. Compose starts as `ambient`
+directly. Tests validate bootstrap ordering, version alignment, architecture
+metadata, disabled network exposure, denied privileges, missing-token failure,
+option bounds, and default policy denial.
 
 The Home Assistant workflow uses the current official multi-architecture builder
 actions. Pull requests lint metadata and build `amd64`/`aarch64` images without

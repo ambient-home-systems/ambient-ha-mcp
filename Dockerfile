@@ -7,6 +7,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
+    AMBIENT_RUNTIME_USER=ambient \
+    HOME=/app \
     PATH="/app/.venv/bin:$PATH"
 
 RUN groupadd --system ambient \
@@ -20,7 +22,6 @@ COPY src ./src
 RUN uv sync --frozen --no-dev --no-editable \
     && chown -R ambient:ambient /app
 
-USER ambient
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

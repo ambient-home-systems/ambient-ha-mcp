@@ -9,13 +9,22 @@ camera URLs, raw registries, complete attributes, automation definitions, traces
 user identifiers, webhook IDs, notification content, or other private values into
 this report. Record counts, availability, and pass/fail results only.
 
+## Current observed status
+
+Version `0.6.5` installed successfully on a real Supervisor host but stopped
+immediately when started; no App log was retained. Source inspection established
+that the image ran as `ambient` before reading Supervisor's root-only
+`/data/options.json`. Version `0.6.6` changes only this boundary: a minimal root
+bootstrap reads the bounded options and then drops to `ambient` before serving.
+Corrected live startup has not passed yet, so the gate remains closed.
+
 ## Operator preflight
 
 - [ ] Home Assistant OS or supported Supervised installation
 - [ ] Architecture is `amd64` or `aarch64`
 - [ ] Custom repository added:
       `https://github.com/ambient-home-systems/ambient-ha-mcp`
-- [ ] Ambient App version `0.6.5` offered
+- [ ] Ambient App version `0.6.6` offered
 - [ ] No Home Assistant token field appears in App configuration
 - [ ] App port remains disabled during initial startup
 - [ ] No router forwarding, public DNS, tunnel, or public reverse proxy configured
@@ -28,7 +37,7 @@ this report. Record counts, availability, and pass/fail results only.
 | Home Assistant version | |
 | Installation type | OS / Supervised |
 | Host architecture | amd64 / aarch64 |
-| Ambient version | 0.6.5 |
+| Ambient version | 0.6.6 |
 | App repository visible | PASS / FAIL |
 | Versioned image pulled | PASS / FAIL |
 

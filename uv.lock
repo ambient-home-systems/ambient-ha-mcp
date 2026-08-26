@@ -9,7 +9,7 @@ resolution-markers = [
 
 [[package]]
 name = "ambient-ha-mcp"
-version = "0.6.5"
+version = "0.6.6"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.6
+
+- Fix Home Assistant startup by reading Supervisor's root-only options document
+  before dropping to the unprivileged `ambient` server identity.
+- Keep App permissions, the 24-tool read-only MCP surface, and disabled default
+  host port unchanged.
+
 ## 0.6.5
 
 - Add Supervisor-proxy authentication without a manual Home Assistant token.

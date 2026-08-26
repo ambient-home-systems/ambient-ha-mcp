@@ -49,9 +49,12 @@ def test_home_assistant_app_metadata_is_safe_and_version_aligned() -> None:
 
 def test_container_uses_runtime_selecting_launcher() -> None:
     dockerfile = (REPOSITORY_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    compose = (REPOSITORY_ROOT / "compose.yaml").read_text(encoding="utf-8")
 
     assert 'CMD ["python", "-m", "ambient_ha.launcher"]' in dockerfile
-    assert "USER ambient" in dockerfile
+    assert "AMBIENT_RUNTIME_USER=ambient" in dockerfile
+    assert "USER ambient" not in dockerfile
+    assert "user: ambient" in compose
 
 
 def test_app_build_workflow_normalizes_quoted_metadata() -> None:
