@@ -19,13 +19,16 @@ policy planning types are not executable and are not exposed as MCP tools.
    or `/health` endpoint for liveness.
 
 The public multi-architecture image exists at
-`ghcr.io/ambient-home-systems/ambient-ha-mcp:0.6.7`, matching `config.yaml`.
+`ghcr.io/ambient-home-systems/ambient-ha-mcp:0.6.6`, matching the currently
+advertised `config.yaml` version. New versions are never advertised until their
+versioned `amd64` and `aarch64` images and manifest are already pullable.
 
 The launcher reads Supervisor's root-only options document during a minimal
 container bootstrap, then drops to the unprivileged `ambient` user before the MCP
 server starts. Version `0.6.5` could install but could not complete this startup.
-Version `0.6.7` also selects Supervisor's documented
-`ws://supervisor/core/websocket` proxy for registry and automation reads.
+The `0.6.7` candidate selects Supervisor's documented
+`ws://supervisor/core/websocket` proxy for registry and automation reads. It becomes
+an offered update only after image-first publication and verification complete.
 
 ## Local endpoint access
 

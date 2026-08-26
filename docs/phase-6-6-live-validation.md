@@ -25,6 +25,8 @@ WebSocket/live-tool retesting remain outstanding, so the gate remains closed.
 - [ ] Custom repository added:
       `https://github.com/ambient-home-systems/ambient-ha-mcp`
 - [ ] Ambient App version `0.6.7` offered
+- [ ] The `0.6.7` image was published and verified for `amd64` and `aarch64`
+      before the catalog began offering it
 - [ ] No Home Assistant token field appears in App configuration
 - [ ] App port remains disabled during initial startup
 - [ ] No router forwarding, public DNS, tunnel, or public reverse proxy configured

@@ -15,6 +15,9 @@ on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
   `/api/websocket` path from the REST proxy base URL.
 - Preserve standalone HTTP and HTTPS derivation at `/api/websocket` while allowing
   runtime adapters to provide an explicit, validated WebSocket endpoint.
+- Eliminate the App update-publication race: immutable version tags publish and
+  verify both architectures first, while CI refuses to advertise a catalog version
+  whose versioned manifest is not already pullable.
 
 ### Security
 
