@@ -75,6 +75,29 @@ Is the semantic facade used by application services. It coordinates:
 No MCP tool should depend directly on `httpx`, WebSocket command types, or a raw
 Home Assistant payload.
 
+### Runtime adapters
+
+One container image and Python implementation serve both deployment modes. The
+`ambient_ha.launcher` selects an adapter before settings are loaded:
+
+- `standalone` preserves the existing `HOME_ASSISTANT_URL` and
+  `HOME_ASSISTANT_TOKEN` environment contract; and
+- `home_assistant_app` reads only allowlisted, bounded values from
+  `/data/options.json`, obtains `SUPERVISOR_TOKEN` from the App environment, and
+  targets the official Core proxy at `http://supervisor/core`.
+
+App mode overwrites any inherited Home Assistant URL/token, hard-forces
+`READ_ONLY=true`, clears `POLICY_FILE`, binds inside the isolated App network, and
+allows no browser origins. The Home Assistant App definition keeps its host port
+disabled by default. The same REST and WebSocket adapters therefore run unchanged
+through Supervisor's Core proxy; no parallel Home Assistant client exists.
+
+The App requests only `homeassistant_api`. It does not request Supervisor API,
+Docker, host networking, ingress, host filesystem maps, hardware privileges, or
+full access. GitHub Actions build the root Docker context into per-architecture
+images and publish a generic multi-architecture manifest whose tag matches the
+App `version`.
+
 ### Normalization
 
 Raw payloads are reduced to typed allowlist models immediately. Denylisting a few

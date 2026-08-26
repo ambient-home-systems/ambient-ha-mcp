@@ -6,10 +6,11 @@ This release is a local/private, read-only foundation. It does not implement
 bridge OAuth, user management, service execution, device control, Home Assistant
 administration, or supported public-internet exposure.
 
-Phase 6 adds authorization and write-preparation architecture only. It introduces
-no MCP write tool, Home Assistant service-call path, central executor, confirmation
-verification endpoint, or persistent audit store. Dry-run plans always state that
-execution is unavailable.
+Phase 6 adds authorization and write-preparation architecture only. Phase 6.5 adds
+Home Assistant App packaging and Supervisor authentication, not control. Neither
+phase introduces an MCP write tool, Home Assistant service-call path, central
+executor, confirmation verification endpoint, or persistent audit store. Dry-run
+plans always state that execution is unavailable.
 
 ## Security objectives
 
@@ -74,6 +75,18 @@ Do not commit:
 
 If a token is committed, revoke it in Home Assistant immediately, rotate it, and
 remove it from repository history using an appropriate secret-removal process.
+
+In Home Assistant App mode, Supervisor injects `SUPERVISOR_TOKEN` and grants Core
+proxy access because `homeassistant_api: true`. The launcher copies that value only
+into process memory as the existing secret-typed Home Assistant credential. It is
+not an App option, file, fixture, report field, or log value. App mode rejects a
+missing Supervisor token and overwrites manually inherited URL/token values.
+
+Supervisor-to-Core authentication does not authenticate an MCP client. The App's
+host port is therefore disabled by default. Operators may assign it only for
+private local validation and must configure exact Host allowlist entries; the
+server must not be exposed through public DNS, router forwarding, tunnels, or an
+unauthenticated reverse proxy.
 
 ## Least privilege
 
@@ -160,6 +173,8 @@ implementation; no database or append-only file store is introduced.
 
 - MCP Host and Origin allowlists enable DNS-rebinding protection.
 - Docker Compose binds to `127.0.0.1` by default.
+- The Home Assistant App uses an isolated network, no host networking, no ingress,
+  and no published port by default.
 - The container runs without root, Linux capabilities, or a writable root
   filesystem.
 - `/health` is unauthenticated by design and returns only coarse readiness flags.
@@ -260,6 +275,11 @@ define expiration, replay protection, identity binding, and server verification.
   audit storage, and request-rate enforcement are not implemented.
 - Live Home Assistant validation has not run because credentials were unavailable.
 - There is intentionally no write path to validate in Phase 6.
+- The Home Assistant App package has not yet been installed on a real Supervisor
+  host, and the versioned GHCR image cannot be install-tested until it is published
+  and public.
+- `homeassistant_api` gives the App's token the Home Assistant access assigned by
+  Supervisor; Ambient's read-only boundary remains required defense in depth.
 
 ## Reporting
 

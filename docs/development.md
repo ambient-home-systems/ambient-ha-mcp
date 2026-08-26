@@ -51,12 +51,12 @@ variables. Never put those values in test code or CI repository variables unless
 the CI environment and secret permissions have been reviewed.
 
 The integration test exercises only authenticated REST/WebSocket reads: connection,
-discovery, a small entity-history query, a small logbook query, a small
-recent-change query, all Phase 4 whole-home diagnostic views, automation listing/
-configuration/reference discovery, and stored trace listing/detail where data is
-available. It skips cleanly when opt-in is absent and never prints the configured
-URL, token, automation content, trace content, or user identifier. It never executes
-an automation or service.
+server metadata, registries and cache refresh, all 24 MCP tools, a small Recorder/
+logbook window, Phase 4 views, automation discovery/traces where supported, and
+privacy inspection against representative raw attributes. It checks results in
+memory and never prints the configured URL, token, raw registry, automation
+content, trace content, private attribute values, or user identifier. It never
+executes an automation or service.
 
 ### Phase 3.5 live-validation status
 
@@ -72,6 +72,35 @@ administrator token; use a dedicated validation account and keep the test opt-in
 Phase 6 policy tests are entirely local and do not need Home Assistant credentials.
 The Phase 3.5–6 live read-only validation limitation remains outstanding when the
 variables are absent; this is not a claim of real-installation validation.
+
+Phase 6.5 adds a mandatory pre-write gate. When credentials are absent or any live
+REST, WebSocket, registry, privacy, cache, historical, automation, or MCP-protocol
+check fails, the result is `NO-GO FOR PHASE 7`. Passing local tests alone cannot
+produce a go decision. See `docs/phase-6-5-validation.md`.
+
+## Home Assistant App development
+
+App metadata lives in `homeassistant-addon/`, and `repository.yaml` makes the GitHub
+repository discoverable as a custom App repository. The root Dockerfile remains the
+single image build context. Its launcher preserves standalone behavior unless
+`AMBIENT_RUNTIME_MODE=home_assistant_app` is set by Supervisor.
+
+App mode reads `/data/options.json`, accepts only documented non-secret settings,
+requires `SUPERVISOR_TOKEN`, uses `http://supervisor/core`, and always forces
+read-only operation. Tests validate version alignment, architecture metadata,
+disabled network exposure, denied privileges, missing-token failure, option bounds,
+and default policy denial.
+
+The Home Assistant workflow uses the current official multi-architecture builder
+actions. Pull requests lint metadata and build `amd64`/`aarch64` images without
+publishing. A push to `main` publishes the matching version and `latest` manifests
+to `ghcr.io/ambient-home-systems/ambient-ha-mcp`. Ensure that GHCR package is public
+before installation testing.
+
+For a full App validation, add the repository to a disposable or approved Home
+Assistant OS/Supervised host, install the App, leave its port disabled for startup,
+verify container/log health, then temporarily assign a local port and test all 24
+tools with MCP Inspector. Remove the port mapping afterward. Never publish it.
 
 ## Policy-security implementation notes
 
@@ -171,6 +200,11 @@ Official sources reviewed for this implementation:
 - [Home Assistant trace WebSocket commands](https://github.com/home-assistant/core/blob/dev/homeassistant/components/trace/websocket_api.py)
 - [Home Assistant trace models](https://github.com/home-assistant/core/blob/dev/homeassistant/components/trace/models.py)
 - [Home Assistant stored-trace configuration](https://www.home-assistant.io/docs/automation/yaml/#number-of-debug-traces-stored)
+- [Home Assistant App repository](https://developers.home-assistant.io/docs/apps/repository/)
+- [Home Assistant App configuration](https://developers.home-assistant.io/docs/apps/configuration/)
+- [Home Assistant App communication](https://developers.home-assistant.io/docs/apps/communication/)
+- [Home Assistant App security](https://developers.home-assistant.io/docs/apps/security/)
+- [Home Assistant App testing](https://developers.home-assistant.io/docs/apps/testing/)
 
 These source-level WebSocket contracts are version-sensitive. Keep feature
 detection and normalized unsupported results when updating them; do not substitute

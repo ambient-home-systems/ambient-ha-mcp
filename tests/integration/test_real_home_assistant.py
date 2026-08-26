@@ -1,7 +1,9 @@
 import os
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
+from mcp import Client
 
 from ambient_ha.config import Settings
 from ambient_ha.ha.client import HomeAssistantClient
@@ -13,6 +15,73 @@ from ambient_ha.models.home import (
     OpeningFilters,
     UnavailableEntityFilters,
 )
+from ambient_ha.server import build_mcp_server
+
+EXPECTED_TOOLS = {
+    "ha_connection_status",
+    "ha_server_info",
+    "ha_get_entity",
+    "ha_search_entities",
+    "ha_list_areas",
+    "ha_get_area",
+    "ha_list_floors",
+    "ha_get_floor",
+    "ha_domain_summary",
+    "ha_get_entity_history",
+    "ha_get_logbook",
+    "ha_get_recent_changes",
+    "ha_get_home_summary",
+    "ha_find_unavailable_entities",
+    "ha_find_low_batteries",
+    "ha_get_openings",
+    "ha_get_lights_on",
+    "ha_diagnose_home",
+    "ha_list_automations",
+    "ha_get_automation",
+    "ha_find_automations_for_entity",
+    "ha_get_automation_traces",
+    "ha_get_automation_trace",
+    "ha_find_activity_cause",
+}
+SENSITIVE_KEY_MARKERS = {
+    "access_token",
+    "authorization",
+    "camera",
+    "credential",
+    "entity_picture",
+    "gps",
+    "latitude",
+    "location",
+    "longitude",
+    "media_content",
+    "password",
+    "secret",
+    "stream",
+    "token",
+    "url",
+    "user_id",
+}
+USEFUL_ATTRIBUTE_KEYS = {
+    "battery_level",
+    "current_humidity",
+    "current_temperature",
+    "humidity",
+    "power",
+    "temperature",
+    "unit_of_measurement",
+}
+
+
+def _assert_private_data_absent(value: Any) -> None:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            assert not any(marker in str(key).casefold() for marker in SENSITIVE_KEY_MARKERS)
+            _assert_private_data_absent(item)
+    elif isinstance(value, list):
+        for item in value:
+            _assert_private_data_absent(item)
+    elif isinstance(value, str):
+        assert not value.casefold().startswith(("http://", "https://", "rtsp://"))
 
 
 @pytest.mark.integration
@@ -20,6 +89,8 @@ from ambient_ha.models.home import (
 async def test_real_home_assistant_connection() -> None:
     if os.environ.get("RUN_HA_INTEGRATION_TESTS") != "1":
         pytest.skip("Set RUN_HA_INTEGRATION_TESTS=1 to use a real Home Assistant instance")
+    if not os.environ.get("HOME_ASSISTANT_URL") or not os.environ.get("HOME_ASSISTANT_TOKEN"):
+        pytest.skip("Secure Home Assistant integration credentials are unavailable")
 
     settings = Settings()  # type: ignore[call-arg]
     client = HomeAssistantClient(settings)
@@ -27,9 +98,19 @@ async def test_real_home_assistant_connection() -> None:
 
     assert result.status == "connected", result.message
 
+    assert client._registry_cache._value is None
     entities = await client.search_entities(EntitySearchFilters(limit=1))
-    areas_supported, _areas = await client.list_areas()
-    floors_supported, _floors = await client.list_floors()
+    first_registry_snapshot = client._registry_cache._value
+    assert first_registry_snapshot is not None
+    areas_supported, areas = await client.list_areas()
+    assert client._registry_cache._value is first_registry_snapshot
+    floors_supported, floors = await client.list_floors()
+    assert client._registry_cache._value is first_registry_snapshot
+    await client.refresh_discovery_cache()
+    assert client._registry_cache._value is None
+    await client.search_entities(EntitySearchFilters(limit=1))
+    assert client._registry_cache._value is not None
+    assert client._registry_cache._value is not first_registry_snapshot
 
     assert entities.returned <= 1
     assert isinstance(areas_supported, bool)
@@ -52,6 +133,38 @@ async def test_real_home_assistant_connection() -> None:
     assert lights.returned <= 5
     assert diagnostics.returned <= 5
     assert automations.returned <= 5
+
+    raw_states = await client._rest.get_states()
+    assert raw_states
+    rich_state = max(
+        raw_states,
+        key=lambda state: (
+            len(state.get("attributes", {})) if isinstance(state.get("attributes"), dict) else 0
+        ),
+    )
+    rich_entity_id = rich_state.get("entity_id")
+    assert isinstance(rich_entity_id, str)
+    rich_entity = await client.get_entity(rich_entity_id)
+    assert rich_entity is not None
+    _assert_private_data_absent(rich_entity.model_dump(mode="json"))
+
+    useful_state = next(
+        (
+            state
+            for state in raw_states
+            if isinstance(state.get("attributes"), dict)
+            and USEFUL_ATTRIBUTE_KEYS.intersection(state["attributes"])
+        ),
+        None,
+    )
+    if useful_state is not None:
+        useful_entity_id = useful_state.get("entity_id")
+        assert isinstance(useful_entity_id, str)
+        useful_entity = await client.get_entity(useful_entity_id)
+        assert useful_entity is not None
+        raw_attributes = useful_state["attributes"]
+        expected_useful = USEFUL_ATTRIBUTE_KEYS.intersection(raw_attributes)
+        assert expected_useful <= useful_entity.attributes.keys()
 
     if entities.entities:
         entity_id = entities.entities[0].entity_id
@@ -102,3 +215,66 @@ async def test_real_home_assistant_connection() -> None:
             if supported:
                 assert trace_found is True
                 assert trace is not None
+
+    assert entities.entities
+    entity_id = entities.entities[0].entity_id
+    domain = entities.entities[0].domain
+    start = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    automation_id = (
+        automations.automations[0].entity_id
+        if automations.automations
+        else "automation.ambient_validation_missing"
+    )
+    trace_run_id = "ambient-validation-missing"
+    if automations.automations:
+        _trace_found, trace_page = await client.get_automation_traces(automation_id, limit=1)
+        if trace_page.traces:
+            trace_run_id = trace_page.traces[0].run_id
+
+    server = build_mcp_server(settings, client=client)
+    async with Client(server) as mcp_client:
+        listed = await mcp_client.list_tools()
+        assert {tool.name for tool in listed.tools} == EXPECTED_TOOLS
+
+        tool_calls: list[tuple[str, dict[str, object]]] = [
+            ("ha_connection_status", {}),
+            ("ha_server_info", {}),
+            ("ha_get_entity", {"entity_id": entity_id}),
+            ("ha_search_entities", {"query": entity_id, "limit": 5}),
+            ("ha_list_areas", {}),
+            (
+                "ha_get_area",
+                {"area": areas[0].area_id if areas else "ambient_validation_missing"},
+            ),
+            ("ha_list_floors", {}),
+            (
+                "ha_get_floor",
+                {"floor": floors[0].floor_id if floors else "ambient_validation_missing"},
+            ),
+            ("ha_domain_summary", {"domain": domain}),
+            ("ha_get_entity_history", {"entity_id": entity_id, "start": start, "limit": 5}),
+            ("ha_get_logbook", {"entity_id": entity_id, "start": start, "limit": 5}),
+            ("ha_get_recent_changes", {"entity_id": entity_id, "duration_minutes": 60}),
+            ("ha_get_home_summary", {}),
+            ("ha_find_unavailable_entities", {"limit": 5}),
+            ("ha_find_low_batteries", {"limit": 5}),
+            ("ha_get_openings", {"state": "any", "limit": 5}),
+            ("ha_get_lights_on", {"limit": 5}),
+            ("ha_diagnose_home", {"limit": 5}),
+            ("ha_list_automations", {"limit": 5}),
+            ("ha_get_automation", {"automation": automation_id}),
+            ("ha_find_automations_for_entity", {"entity_id": entity_id, "limit": 5}),
+            ("ha_get_automation_traces", {"automation": automation_id, "limit": 5}),
+            (
+                "ha_get_automation_trace",
+                {"automation": automation_id, "run_id": trace_run_id},
+            ),
+            (
+                "ha_find_activity_cause",
+                {"entity_id": entity_id, "start": start, "limit": 5},
+            ),
+        ]
+        for tool_name, arguments in tool_calls:
+            tool_result = await mcp_client.call_tool(tool_name, arguments)
+            assert not tool_result.is_error, tool_name
+            _assert_private_data_absent(tool_result.structured_content)

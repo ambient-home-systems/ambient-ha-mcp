@@ -6,6 +6,29 @@ on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-08-25
+
+### Added
+
+- Home Assistant App repository metadata, safe configuration schema, operator
+  documentation, translations, container health, and disabled-by-default MCP port.
+- A shared runtime launcher that preserves standalone behavior and selects
+  Supervisor Core-proxy authentication in App mode.
+- Official Home Assistant multi-architecture build/lint workflow for `amd64` and
+  `aarch64` images published with version-aligned manifests.
+- Opt-in live validation coverage for all 24 MCP tools, registry cache refresh,
+  representative privacy filtering, and supported automation/history interfaces.
+
+### Security
+
+- App mode obtains `SUPERVISOR_TOKEN` only from the environment, never App options,
+  and does not persist or log it.
+- App startup hard-forces `READ_ONLY=true`, clears external policy configuration,
+  rejects unknown options, and requests no Supervisor, Docker, ingress, host-network,
+  filesystem, device, or privileged access.
+- Phase 7 remains blocked until live Home Assistant and Supervisor App validation
+  completes successfully.
+
 ## [0.6.0] - 2026-08-25
 
 ### Added

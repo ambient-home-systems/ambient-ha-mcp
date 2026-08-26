@@ -1,0 +1,36 @@
+configuration:
+  log_level:
+    name: Log level
+    description: Logging verbosity. Tokens and private Home Assistant values are not logged.
+  request_timeout_seconds:
+    name: Request timeout
+    description: Maximum seconds for each Home Assistant API request.
+  registry_cache_ttl_seconds:
+    name: Registry cache lifetime
+    description: Seconds to retain entity, device, area, and floor registry metadata.
+  history_default_lookback_hours:
+    name: Default history lookback
+    description: Default number of hours queried by historical tools.
+  history_max_lookback_hours:
+    name: Maximum history lookback
+    description: Hard upper bound in hours for historical queries.
+  history_default_limit:
+    name: Default history limit
+    description: Default maximum event count for historical tools.
+  history_max_events:
+    name: Maximum history events
+    description: Hard upper bound on returned historical events.
+  history_max_entities:
+    name: Maximum history entities
+    description: Hard upper bound on entities in a historical query.
+  battery_warning_threshold:
+    name: Low-battery threshold
+    description: Battery percentage at or below which diagnostics report a low battery.
+  ignored_diagnostic_entities:
+    name: Ignored diagnostic entities
+    description: Entity IDs excluded from whole-home diagnostic findings.
+  mcp_allowed_hosts:
+    name: Allowed MCP hosts
+    description: Exact Host header values accepted by the MCP endpoint. Avoid wildcards.
+network:
+  8000/TCP: Local MCP Streamable HTTP endpoint. Disabled by default.
