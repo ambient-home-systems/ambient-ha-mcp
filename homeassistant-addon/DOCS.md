@@ -4,9 +4,9 @@ This experimental Home Assistant App runs the same Ambient MCP server image as t
 standalone deployment. It uses Home Assistant Supervisor's Core API proxy and the
 short-lived `SUPERVISOR_TOKEN`; no long-lived access token is entered in App options.
 
-Phase 6.5 is strictly read only. The launcher always sets `READ_ONLY=true`, and the
-published MCP surface contains only the 24 Phase 1–5 read tools. Phase 6 policy planning
-types are not executable and are not exposed as MCP tools.
+Phase 6.6 remains strictly read only. The launcher always sets `READ_ONLY=true`,
+and the published MCP surface contains only the 24 Phase 1–5 read tools. Phase 6
+policy planning types are not executable and are not exposed as MCP tools.
 
 ## Install
 
@@ -18,8 +18,8 @@ types are not executable and are not exposed as MCP tools.
 5. Check the App log for a normal startup message and use the container health check
    or `/health` endpoint for liveness.
 
-The multi-architecture image must exist publicly at the image and version declared in
-`config.yaml`. A source checkout alone does not publish that image.
+The public multi-architecture image exists at
+`ghcr.io/ambient-home-systems/ambient-ha-mcp:0.6.5`, matching `config.yaml`.
 
 ## Local endpoint access
 
@@ -44,7 +44,8 @@ There is no token option and no option that disables read-only mode.
 Home Assistant authenticates the App to Core through Supervisor. That does **not**
 authenticate clients connecting to the MCP HTTP endpoint. Keep the endpoint local and
 disabled when not testing. Remote ChatGPT connectivity requires a separately designed
-authenticated deployment and is outside Phase 6.5.
+authenticated deployment and is outside Phase 6.6.
 
 Live validation against a real Home Assistant instance must pass before any Phase 7
-write/control work can begin.
+write/control work can begin. Use the repository's Phase 6.6 sanitized validation
+template when returning installation results.

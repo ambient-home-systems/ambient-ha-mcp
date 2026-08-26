@@ -6,6 +6,17 @@ on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 
 ## [Unreleased]
 
+### Documentation
+
+- Record successful public publication of the versioned `0.6.5` Home Assistant App
+  images and provide an operator-focused installation, troubleshooting, and
+  sanitized live-validation handoff for Phase 6.6.
+
+### Security
+
+- Preserve the mandatory `NO-GO FOR PHASE 7` decision until real Supervisor
+  installation, live privacy inspection, and read-only integration validation pass.
+
 ## [0.6.5] - 2026-08-25
 
 ### Added

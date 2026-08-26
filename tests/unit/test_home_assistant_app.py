@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import yaml
@@ -62,6 +63,14 @@ def test_app_build_workflow_normalizes_quoted_metadata() -> None:
     assert 'image="${APP_IMAGE//\\"/}"' in workflow
     assert 'version="${APP_VERSION//\\"/}"' in workflow
     assert 'echo "version=${version}" >> "${GITHUB_OUTPUT}"' in workflow
+
+
+def test_phase_6_6_report_lists_every_read_only_tool_once() -> None:
+    report = (REPOSITORY_ROOT / "docs" / "phase-6-6-live-validation.md").read_text(encoding="utf-8")
+    listed_tools = re.findall(r"^\| `(ha_[a-z0-9_]+)` \|", report, flags=re.MULTILINE)
+
+    assert len(listed_tools) == 24
+    assert len(set(listed_tools)) == 24
 
 
 def test_phase_6_5_default_policy_denies_every_non_read_operation() -> None:
