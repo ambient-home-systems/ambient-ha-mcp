@@ -17,12 +17,19 @@ def load_yaml(path: Path) -> dict[str, object]:
     return loaded
 
 
-def test_home_assistant_app_metadata_is_safe_and_version_aligned() -> None:
+def semantic_version(value: object) -> tuple[int, int, int]:
+    assert isinstance(value, str)
+    parts = value.split(".")
+    assert len(parts) == 3
+    return int(parts[0]), int(parts[1]), int(parts[2])
+
+
+def test_home_assistant_app_metadata_is_safe_and_never_leads_package_version() -> None:
     repository = load_yaml(REPOSITORY_ROOT / "repository.yaml")
     config = load_yaml(REPOSITORY_ROOT / "homeassistant-addon" / "config.yaml")
 
     assert repository["url"] == "https://github.com/ambient-home-systems/ambient-ha-mcp"
-    assert config["version"] == ambient_ha.__version__
+    assert semantic_version(config["version"]) <= semantic_version(ambient_ha.__version__)
     assert config["arch"] == ["aarch64", "amd64"]
     assert config["image"] == "ghcr.io/ambient-home-systems/ambient-ha-mcp"
     assert config["homeassistant_api"] is True
@@ -57,15 +64,39 @@ def test_container_uses_runtime_selecting_launcher() -> None:
     assert "user: ambient" in compose
 
 
-def test_app_build_workflow_normalizes_quoted_metadata() -> None:
+def test_app_pr_build_never_publishes_or_advertises_a_candidate() -> None:
     workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "home-assistant-app.yml").read_text(
         encoding="utf-8"
     )
 
-    assert "version: ${{ steps.normalize.outputs.version }}" in workflow
+    assert "pull_request:" in workflow
+    assert "branches: [main]" not in workflow
+    assert "push: false" in workflow
+    assert "Publish multi-architecture manifest" not in workflow
+    assert "APP_VERSION: ${{ steps.package.outputs.version }}" in workflow
     assert 'image="${APP_IMAGE//\\"/}"' in workflow
     assert 'version="${APP_VERSION//\\"/}"' in workflow
     assert 'echo "version=${version}" >> "${GITHUB_OUTPUT}"' in workflow
+
+
+def test_versioned_release_precedes_separate_catalog_promotion() -> None:
+    publish = (
+        REPOSITORY_ROOT / ".github" / "workflows" / "publish-home-assistant-app.yml"
+    ).read_text(encoding="utf-8")
+    ci = (REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert 'tags:\n      - "v*.*.*"' in publish
+    assert 'if [[ "${version}" != "${package_version}" ]]' in publish
+    assert "push: true" in publish
+    assert "Publish versioned multi-architecture manifest" in publish
+    assert "linux/amd64" in publish
+    assert "linux/arm64" in publish
+    assert "image-tags: ${{ needs.prepare.outputs.version }}" in publish
+    assert "            latest" not in publish
+    assert "Verify advertised App image exists" in ci
+    assert 'docker buildx imagetools inspect "${image}:${version}"' in ci
+    assert "linux/amd64" in ci
+    assert "linux/arm64" in ci
 
 
 def test_phase_6_6_report_lists_every_read_only_tool_once() -> None:

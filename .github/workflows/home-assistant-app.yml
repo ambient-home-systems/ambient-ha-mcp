@@ -2,8 +2,6 @@ name: Home Assistant App
 
 on:
   pull_request:
-  push:
-    branches: [main]
 
 permissions:
   contents: read
@@ -37,11 +35,20 @@ jobs:
         uses: home-assistant/actions/helpers/info@master
         with:
           path: ./homeassistant-addon
+      - name: Read candidate package version
+        id: package
+        run: |
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid candidate package version" >&2
+            exit 1
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
       - name: Normalize image information
         id: normalize
         env:
           APP_IMAGE: ${{ steps.info.outputs.image }}
-          APP_VERSION: ${{ steps.info.outputs.version }}
+          APP_VERSION: ${{ steps.package.outputs.version }}
         run: |
           image="${APP_IMAGE//\"/}"
           version="${APP_VERSION//\"/}"
@@ -81,7 +88,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - name: Build and optionally publish architecture image
+      - name: Build architecture image without publishing
         uses: home-assistant/builder/actions/build-image@2026.06.0
         with:
           arch: ${{ matrix.arch }}
@@ -96,25 +103,5 @@ jobs:
             io.hass.name=${{ needs.prepare.outputs.name }}
             io.hass.description=${{ needs.prepare.outputs.description }}
             io.hass.url=${{ needs.prepare.outputs.url }}
-          push: ${{ github.event_name == 'push' }}
+          push: false
           version: ${{ needs.prepare.outputs.version }}
-
-  manifest:
-    name: Publish multi-architecture manifest
-    needs: [prepare, build]
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      packages: write
-    steps:
-      - name: Publish multi-architecture manifest
-        uses: home-assistant/builder/actions/publish-multi-arch-manifest@2026.06.0
-        with:
-          architectures: ${{ needs.prepare.outputs.architectures }}
-          container-registry-password: ${{ secrets.GITHUB_TOKEN }}
-          image-name: ${{ needs.prepare.outputs.image_name }}
-          image-tags: |
-            ${{ needs.prepare.outputs.version }}
-            latest
-          registry-prefix: ${{ needs.prepare.outputs.registry_prefix }}

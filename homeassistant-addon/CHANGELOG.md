@@ -6,6 +6,8 @@
   documented `ws://supervisor/core/websocket` proxy.
 - Preserve standalone `/api/websocket` routing, Supervisor-token authentication,
   the 24-tool read-only surface, and existing App permissions.
+- Prevent Home Assistant from offering this update until its versioned `amd64` and
+  `aarch64` images and multi-architecture manifest are published and verified.
 
 ## 0.6.6
 

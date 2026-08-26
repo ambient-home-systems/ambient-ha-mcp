@@ -92,15 +92,18 @@ read-only operation. App runtime also supplies Supervisor's distinct
 derivation. Because Supervisor makes that options document root-only, the
 image bootstrap reads it before dropping groups, GID, and UID to the fixed
 `ambient` account; the server then starts unprivileged. Compose starts as `ambient`
-directly. Tests validate bootstrap ordering, version alignment, architecture
+directly. Tests validate bootstrap ordering, safe version ordering, architecture
 metadata, disabled network exposure, denied privileges, missing-token failure,
 option bounds, and default policy denial.
 
 The Home Assistant workflow uses the current official multi-architecture builder
 actions. Pull requests lint metadata and build `amd64`/`aarch64` images without
-publishing. A push to `main` publishes the matching version and `latest` manifests
-to `ghcr.io/ambient-home-systems/ambient-ha-mcp`. Ensure that GHCR package is public
-before installation testing.
+publishing. Merging source code does not publish or advertise an App update.
+An immutable `vMAJOR.MINOR.PATCH` tag publishes only that version and verifies its
+multi-architecture manifest. A later, separate catalog-promotion PR may update
+`homeassistant-addon/config.yaml`; CI rejects that PR unless both advertised
+platforms are already pullable. Follow [the App release procedure](releasing.md)
+exactly. Never combine image publication and catalog promotion in one commit or PR.
 
 For a full App validation, add the repository to a disposable or approved Home
 Assistant OS/Supervised host, install the App, leave its port disabled for startup,

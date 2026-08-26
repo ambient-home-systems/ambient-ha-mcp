@@ -6,10 +6,11 @@ foundation for the future user-facing **Ambient Home Assistant** application.
 
 > **Phase 6.6 status:** live installation confirms that `0.6.6` starts and its REST
 > authentication succeeds, but exposed incorrect standalone-style WebSocket URL
-> derivation for the Supervisor proxy. Version `0.6.7` supplies Supervisor's
-> documented WebSocket endpoint explicitly. App mode remains local/private and
-> read-only, uses Supervisor authentication, and exposes only the 24 read tools.
-> Upgrade and complete live validation on the real host remain outstanding.
+> derivation for the Supervisor proxy. The `0.6.7` source candidate supplies
+> Supervisor's documented WebSocket endpoint explicitly. The App catalog remains
+> on `0.6.6` until the `0.6.7` multi-architecture image is published and verified;
+> Home Assistant must never advertise an unpullable update. App mode remains
+> local/private and read-only and exposes only the 24 read tools.
 > **NO-GO FOR PHASE 7** until that validation passes.
 
 ## What it is—and what it is not
@@ -152,10 +153,10 @@ Then connect the Inspector to `http://127.0.0.1:8000/mcp`.
 ## Home Assistant App
 
 The repository now contains a Home Assistant App definition for `amd64` and
-`aarch64`. The versioned multi-architecture release image is
-`ghcr.io/ambient-home-systems/ambient-ha-mcp:0.6.7`; it becomes installable after
-the main-branch publication workflow completes, and the App configuration uses that
-exact version rather than relying only on `latest`.
+`aarch64`. The currently advertised release is
+`ghcr.io/ambient-home-systems/ambient-ha-mcp:0.6.6`. Candidate images are published
+from immutable version tags and verified before a separate PR is allowed to update
+the App catalog version. The App never relies on `latest` for installation.
 
 1. Add `https://github.com/ambient-home-systems/ambient-ha-mcp` as a custom App
    repository.
@@ -170,6 +171,7 @@ The launcher hard-forces `READ_ONLY=true` and ignores any external policy file.
 See [Home Assistant App installation](docs/home-assistant-app.md) for exact setup,
 upgrade, rollback, troubleshooting, and security guidance. Record real-installation
 results in the [sanitized Phase 6.6 validation template](docs/phase-6-6-live-validation.md).
+Maintainers must follow the non-negotiable [App release procedure](docs/releasing.md).
 
 ## Development commands
 
