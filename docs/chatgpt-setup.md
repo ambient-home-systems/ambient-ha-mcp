@@ -12,6 +12,11 @@ configuration, or raw historical attributes.
 npx @modelcontextprotocol/inspector@latest
 ```
 
+For a Home Assistant App installation, port `8000/tcp` is disabled by default.
+Temporarily assign a local host port and add the exact Home Assistant hostname to
+`mcp_allowed_hosts` before using Inspector, then remove the mapping. App installation
+does not by itself make the MCP endpoint safe or reachable for ChatGPT.
+
 ## Connecting ChatGPT
 
 ChatGPT needs either a reachable HTTPS Streamable HTTP endpoint (normally ending

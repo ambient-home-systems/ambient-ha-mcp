@@ -1,0 +1,120 @@
+name: Home Assistant App
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  metadata:
+    name: Validate App metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: frenck/action-addon-linter@v2.21
+        with:
+          path: ./homeassistant-addon
+
+  prepare:
+    name: Prepare App image
+    runs-on: ubuntu-latest
+    outputs:
+      architectures: ${{ steps.info.outputs.architectures }}
+      build_matrix: ${{ steps.matrix.outputs.matrix }}
+      description: ${{ steps.info.outputs.description }}
+      image_name: ${{ steps.normalize.outputs.image_name }}
+      name: ${{ steps.info.outputs.name }}
+      registry_prefix: ${{ steps.normalize.outputs.registry_prefix }}
+      url: ${{ steps.info.outputs.url }}
+      version: ${{ steps.normalize.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Read App information
+        id: info
+        uses: home-assistant/actions/helpers/info@master
+        with:
+          path: ./homeassistant-addon
+      - name: Normalize image information
+        id: normalize
+        env:
+          APP_IMAGE: ${{ steps.info.outputs.image }}
+          APP_VERSION: ${{ steps.info.outputs.version }}
+        run: |
+          image="${APP_IMAGE//\"/}"
+          version="${APP_VERSION//\"/}"
+
+          if [[ ! "${image}" =~ ^ghcr\.io/[a-z0-9._/-]+$ ]]; then
+            echo "Invalid App image metadata" >&2
+            exit 1
+          fi
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid App version metadata" >&2
+            exit 1
+          fi
+
+          echo "image_name=${image##*/}" >> "${GITHUB_OUTPUT}"
+          echo "registry_prefix=${image%/*}" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+      - name: Prepare architecture matrix
+        id: matrix
+        uses: home-assistant/builder/actions/prepare-multi-arch-matrix@2026.06.0
+        with:
+          architectures: ${{ steps.info.outputs.architectures }}
+          image-name: ${{ steps.normalize.outputs.image_name }}
+          registry-prefix: ${{ steps.normalize.outputs.registry_prefix }}
+
+  build:
+    name: Build ${{ matrix.arch }} App image
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.build_matrix) }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and optionally publish architecture image
+        uses: home-assistant/builder/actions/build-image@2026.06.0
+        with:
+          arch: ${{ matrix.arch }}
+          container-registry-password: ${{ secrets.GITHUB_TOKEN }}
+          context: .
+          image: ${{ matrix.image }}
+          image-tags: |
+            ${{ needs.prepare.outputs.version }}
+            latest
+          labels: |
+            io.hass.type=app
+            io.hass.name=${{ needs.prepare.outputs.name }}
+            io.hass.description=${{ needs.prepare.outputs.description }}
+            io.hass.url=${{ needs.prepare.outputs.url }}
+          push: ${{ github.event_name == 'push' }}
+          version: ${{ needs.prepare.outputs.version }}
+
+  manifest:
+    name: Publish multi-architecture manifest
+    needs: [prepare, build]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      packages: write
+    steps:
+      - name: Publish multi-architecture manifest
+        uses: home-assistant/builder/actions/publish-multi-arch-manifest@2026.06.0
+        with:
+          architectures: ${{ needs.prepare.outputs.architectures }}
+          container-registry-password: ${{ secrets.GITHUB_TOKEN }}
+          image-name: ${{ needs.prepare.outputs.image_name }}
+          image-tags: |
+            ${{ needs.prepare.outputs.version }}
+            latest
+          registry-prefix: ${{ needs.prepare.outputs.registry_prefix }}

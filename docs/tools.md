@@ -4,8 +4,8 @@ All tools are read-only and return structured models. Errors use stable codes an
 safe messages; normal not-found and unsupported-feature outcomes are represented
 in the result rather than raised as generic failures.
 
-Phase 6 intentionally adds no public MCP tool. The discovery surface remains 24
-read-only tools. Policy planning, confirmation requirements, and audit events are
+Phases 6 and 6.5 intentionally add no public MCP tool. The discovery surface
+remains 24 read-only tools. Policy planning, confirmation requirements, and audit events are
 internal architecture only and cannot execute a Home Assistant operation.
 
 ## Diagnostics
