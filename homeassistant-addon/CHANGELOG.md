@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.8
+
+- Bypass inherited system proxy configuration for the internal Supervisor
+  WebSocket connection while preserving standalone proxy behavior.
+- Prevent DEBUG transport-frame logging and redact quoted WebSocket authentication
+  tokens as defense in depth.
+- Preserve the existing Supervisor endpoint, App permissions, 24 read-only tools,
+  and Phase 7 gate.
+
 ## 0.6.7
 
 - Fix App-mode registry and automation WebSocket access by using Supervisor's

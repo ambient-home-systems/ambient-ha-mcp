@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     home_assistant_websocket_url: str | None = Field(
         default=None, alias="HOME_ASSISTANT_WEBSOCKET_URL"
     )
+    home_assistant_websocket_use_system_proxy: bool = Field(
+        default=True, alias="HOME_ASSISTANT_WEBSOCKET_USE_SYSTEM_PROXY"
+    )
     home_assistant_token: SecretStr = Field(min_length=1, alias="HOME_ASSISTANT_TOKEN")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO", alias="LOG_LEVEL"
