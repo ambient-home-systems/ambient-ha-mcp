@@ -133,7 +133,9 @@ lengths, and nested collections are bounded.
 
 Entity state is never cached. Entity, device, area, and floor registry metadata is
 cached in one in-process snapshot for `REGISTRY_CACHE_TTL_SECONDS` (60 seconds by
-default), reducing access frequency without persisting household metadata.
+default), reducing access frequency without persisting household metadata. WebSocket
+messages retain an explicit 16 MiB receive ceiling so large real registries remain
+readable without allowing unbounded upstream payloads.
 
 Historical Recorder and logbook data uses the same attribute allowlist and URL/
 credential filtering as current entity data. Logbook messages containing URL or

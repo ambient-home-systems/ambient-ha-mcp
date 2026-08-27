@@ -6,6 +6,22 @@ on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 
 ## [Unreleased]
 
+## [0.6.9] - 2026-08-27
+
+### Fixed
+
+- Raise the Home Assistant WebSocket receive ceiling from the dependency's 1 MiB
+  default to an explicit 16 MiB bound so real entity and device registries can be
+  read without a code-1009 disconnect being reported as unreachable.
+- Add a local protocol regression test that authenticates normally and reads a
+  registry response larger than 1 MiB through the production adapter.
+
+### Security
+
+- Preserve a finite message-size ceiling, short-lived connections, Supervisor-token
+  authentication, token-safe logging, the 24-tool read-only surface, and the Phase 7
+  gate. No write path, fallback credential, permission, or control tool was added.
+
 ## [0.6.8] - 2026-08-27
 
 ### Fixed
