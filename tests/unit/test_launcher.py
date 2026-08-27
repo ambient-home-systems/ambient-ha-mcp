@@ -11,7 +11,9 @@ def write_options(path: Path, options: object) -> None:
     path.write_text(json.dumps(options), encoding="utf-8")
 
 
-def test_app_runtime_uses_supervisor_auth_and_forces_read_only(tmp_path: Path) -> None:
+def test_app_runtime_uses_supervisor_auth_and_defaults_to_safe_control_gates(
+    tmp_path: Path,
+) -> None:
     options_path = tmp_path / "options.json"
     write_options(
         options_path,
@@ -40,6 +42,7 @@ def test_app_runtime_uses_supervisor_auth_and_forces_read_only(tmp_path: Path) -
     assert environ["HOME_ASSISTANT_WEBSOCKET_USE_SYSTEM_PROXY"] == "false"
     assert environ["HOME_ASSISTANT_TOKEN"] == "supervisor-secret"
     assert environ["READ_ONLY"] == "true"
+    assert environ["CONTROL_ENABLED"] == "false"
     assert environ["MCP_HOST"] == "0.0.0.0"  # noqa: S104
     assert environ["MCP_PORT"] == "8000"
     assert environ["MCP_ALLOWED_ORIGINS"] == ""
@@ -129,7 +132,8 @@ def test_app_runtime_requires_supervisor_auth_without_disclosing_values(tmp_path
     "options",
     [
         {"home_assistant_token": "not-allowed"},
-        {"read_only": False},
+        {"log_level": False},
+        {"allowed_switch_entities": ["light.wrong_domain"]},
         {"mcp_allowed_hosts": ["valid", ""]},
         {"mcp_allowed_hosts": ["*"]},
         {"mcp_allowed_hosts": "homeassistant.local"},
@@ -163,6 +167,32 @@ def test_launcher_preserves_standalone_mode(monkeypatch: pytest.MonkeyPatch) -> 
     launcher.main()
 
     assert started is True
+
+
+def test_app_runtime_requires_explicit_dual_opt_in_and_exact_allowlists(tmp_path: Path) -> None:
+    options_path = tmp_path / "options.json"
+    write_options(
+        options_path,
+        {
+            "read_only": False,
+            "control_enabled": True,
+            "allowed_switch_entities": ["switch.safe_lamp"],
+            "allowed_scene_entities": ["scene.reading"],
+            "allowed_script_entities": ["script.safe_chime"],
+        },
+    )
+    environ = {"SUPERVISOR_TOKEN": "secret"}
+
+    launcher.configure_home_assistant_app_environment(
+        options_path=options_path,
+        environ=environ,
+    )
+
+    assert environ["READ_ONLY"] == "false"
+    assert environ["CONTROL_ENABLED"] == "true"
+    assert environ["ALLOWED_SWITCH_ENTITIES"] == "switch.safe_lamp"
+    assert environ["ALLOWED_SCENE_ENTITIES"] == "scene.reading"
+    assert environ["ALLOWED_SCRIPT_ENTITIES"] == "script.safe_chime"
 
 
 def test_launcher_fails_closed_for_unknown_runtime_mode(

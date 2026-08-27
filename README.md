@@ -4,14 +4,11 @@ Ambient Home Assistant MCP is a secure, semantic bridge that gives ChatGPT and
 other MCP clients purpose-built access to Home Assistant. It is the server
 foundation for the future user-facing **Ambient Home Assistant** application.
 
-> **Phase 6.6 status:** live `0.6.8` validation confirms REST authentication but
-> exposes a second WebSocket transport defect: real registry responses can exceed
-> the dependency's 1 MiB default receive limit. The `0.6.9` source candidate uses
-> an explicit 16 MiB ceiling for bounded registry reads. The App catalog remains on
-> `0.6.8` until the `0.6.9` multi-architecture image is published and independently
-> verified; Home Assistant must never advertise an unpullable update. App mode
-> remains local/private and read-only and exposes only the 24 read tools.
-> **NO-GO FOR PHASE 7** until that validation passes.
+> **Phase 7 status:** v0.6.9 passed real Home Assistant validation across all 24
+> read-only tools and is the stable App baseline. The v0.7.0 source introduces seven
+> semantic control tools behind independent, disabled-by-default safety gates and a
+> central policy/execution/audit pipeline. No automated live write is enabled.
+> Deployment remains local/private until a later authentication phase is complete.
 
 ## What it is—and what it is not
 
@@ -72,9 +69,17 @@ See [the architecture decision record](docs/architecture.md).
 | `ha_get_automation_traces` | Lists compact metadata for recent stored automation traces. |
 | `ha_get_automation_trace` | Normalizes one bounded stored execution trace with nested paths. |
 | `ha_find_activity_cause` | Correlates Recorder contexts, traces, static references, and timing under strict evidence rules. |
+| `ha_control_light` | Controls exact light IDs with supported on/off, brightness, color-temperature, and RGB values. |
+| `ha_control_fan` | Controls exact fan IDs with on/off and supported percentages. |
+| `ha_control_media_player` | Performs play/pause/stop, bounded volume, and mute operations without arbitrary media URLs. |
+| `ha_control_climate` | Sets supported HVAC modes and target temperatures within device and policy limits. |
+| `ha_control_switch` | Controls only exact switch IDs explicitly authorized by server policy. |
+| `ha_activate_scene` | Accepts exact scene IDs but remains confirmation-blocked throughout Phase 7. |
+| `ha_run_script` | Runs only exact explicitly authorized scripts, without variables or raw service data. |
 | `GET /health` | Reports application liveness and separate Home Assistant readiness. |
 
-No service calls, state changes, or administrative endpoints are implemented.
+No generic service-call, administrative, lock, alarm, cover/garage, valve,
+automation-trigger, or configuration-mutation tool is implemented.
 
 ## Security model
 
@@ -107,11 +112,13 @@ No service calls, state changes, or administrative endpoints are implemented.
   engine supports `allow`, `deny`, and `confirm_required`, deterministic rule
   precedence, canonical targets, value limits, protected entities, and hard
   mass-action limits.
-- `READ_ONLY=true` is a hard boundary: every non-read operation is denied even if
-  a narrower rule allows it or the Home Assistant credential is an administrator.
-- Dry-run plans are internal-only and always report execution unavailable in
-  Phase 6. Confirmation has no spoofable caller-supplied boolean; it remains an
-  unverified server-challenge concept until a later execution phase.
+- `READ_ONLY=true` and `CONTROL_ENABLED=false` are independent hard boundaries.
+  Writes require both `READ_ONLY=false` and `CONTROL_ENABLED=true`; exact policy,
+  capability, value, and mass-action checks still apply afterward.
+- Every executable plan crosses one central executor. Confirmation has no spoofable
+  caller-supplied boolean; confirmation-required plans remain blocked.
+- Exact entity IDs are the only writable targets. The server never chooses a device
+  merely because a display name appears similar.
 - Audit events are bounded and recursively redact credentials, webhooks, URLs,
   messages, commands, camera streams, and other secret-bearing service data.
 - Compose starts directly as a non-root user with a read-only filesystem. In App
@@ -129,7 +136,7 @@ Requirements: Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 cp .env.example .env
 # Edit .env and provide HOME_ASSISTANT_URL and HOME_ASSISTANT_TOKEN.
 # Optional: copy policy.example.toml and set POLICY_FILE to its absolute path.
-# Keep READ_ONLY=true; Phase 6 has no execution path regardless.
+# Keep READ_ONLY=true and CONTROL_ENABLED=false unless controls are deliberately configured.
 uv sync --all-extras
 uv run ambient-ha-mcp
 ```
@@ -153,8 +160,8 @@ Then connect the Inspector to `http://127.0.0.1:8000/mcp`.
 ## Home Assistant App
 
 The repository now contains a Home Assistant App definition for `amd64` and
-`aarch64`. The currently advertised release is
-`ghcr.io/ambient-home-systems/ambient-ha-mcp:0.6.7`. Candidate images are published
+`aarch64`. The currently validated and advertised baseline is
+`ghcr.io/ambient-home-systems/ambient-ha-mcp:0.6.9`. Candidate images are published
 from immutable version tags and verified before a separate PR is allowed to update
 the App catalog version. The App never relies on `latest` for installation.
 
@@ -167,7 +174,12 @@ the App catalog version. The App never relies on `latest` for installation.
 Supervisor supplies a short-lived token and the App connects through
 the documented REST and WebSocket Core proxies; no Home Assistant URL or token
 appears in App options.
-The launcher hard-forces `READ_ONLY=true` and ignores any external policy file.
+The v0.7.0 catalog-promotion metadata must default to `read_only: true` and
+`control_enabled: false`; it is deliberately deferred until the new image exists.
+After promotion, enabling controls requires changing both gates. Switches and
+scripts additionally require exact entity-ID allowlists. Scene IDs may be listed for
+future confirmation support, but Phase 7 never executes scenes. External policy files
+remain disabled in App mode.
 See [Home Assistant App installation](docs/home-assistant-app.md) for exact setup,
 upgrade, rollback, troubleshooting, and security guidance. Record real-installation
 results in the [sanitized Phase 6.6 validation template](docs/phase-6-6-live-validation.md).
@@ -211,6 +223,7 @@ orchestrator does not restart a healthy bridge in a loop.
 - [Home Assistant App installation](docs/home-assistant-app.md)
 - [Phase 6.5 validation gate](docs/phase-6-5-validation.md)
 - [Phase 6.6 live-validation template](docs/phase-6-6-live-validation.md)
+- [Phase 7 safe-control validation](docs/phase-7-validation.md)
 
 ## License
 

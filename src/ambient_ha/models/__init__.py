@@ -20,6 +20,15 @@ from ambient_ha.models.automation import (
     AutomationTraceSummary,
     CausalityEvidence,
 )
+from ambient_ha.models.control import (
+    ControlAction,
+    ControlDomain,
+    ControlIntent,
+    ControlResult,
+    ControlServiceCall,
+    ControlStatus,
+    ControlTargetResult,
+)
 from ambient_ha.models.diagnostics import ConnectionStatus, HealthStatus, ServerInfoResult
 from ambient_ha.models.discovery import (
     AreaDetail,
@@ -98,6 +107,13 @@ __all__ = [
     "AutomationTracesResult",
     "CausalityEvidence",
     "ConnectionStatus",
+    "ControlAction",
+    "ControlDomain",
+    "ControlIntent",
+    "ControlResult",
+    "ControlServiceCall",
+    "ControlStatus",
+    "ControlTargetResult",
     "DiagnosticEntity",
     "DiagnosticFinding",
     "DomainSummary",

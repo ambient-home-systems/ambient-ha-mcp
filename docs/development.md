@@ -58,25 +58,14 @@ memory and never prints the configured URL, token, raw registry, automation
 content, trace content, private attribute values, or user identifier. It never
 executes an automation or service.
 
-### Phase 3.5 live-validation status
+### Live-validation status
 
-Phase 3.5 remains blocked solely because `HOME_ASSISTANT_URL` and
-`HOME_ASSISTANT_TOKEN` were unavailable in the validation runtime. Repository,
-unit, protocol, lint, type, and package checks passed, but this is not a claim of
-production validation against a real Home Assistant installation.
+The v0.6.9 Home Assistant App passed real Supervisor authentication, REST,
+WebSocket, registry, privacy, cache/restart, history, automation, MCP protocol, and
+all 24 read-tool checks. That reviewed result produced `GO FOR PHASE 7`.
 
-Phase 5 live validation is likewise outstanding when those variables are absent.
-Phase 5 configuration and trace enrichment currently requires a Home Assistant
-administrator token; use a dedicated validation account and keep the test opt-in.
-
-Phase 6 policy tests are entirely local and do not need Home Assistant credentials.
-The Phase 3.5–6 live read-only validation limitation remains outstanding when the
-variables are absent; this is not a claim of real-installation validation.
-
-Phase 6.5 adds a mandatory pre-write gate. When credentials are absent or any live
-REST, WebSocket, registry, privacy, cache, historical, automation, or MCP-protocol
-check fails, the result is `NO-GO FOR PHASE 7`. Passing local tests alone cannot
-produce a go decision. See `docs/phase-6-5-validation.md`.
+Phase 7 automated tests remain local and never mutate Home Assistant. A real write
+is a separate opt-in validation step and is not implied by read-only live success.
 
 ## Home Assistant App development
 
@@ -86,8 +75,8 @@ single image build context. Its launcher preserves standalone behavior unless
 `AMBIENT_RUNTIME_MODE=home_assistant_app` is set by Supervisor.
 
 App mode reads `/data/options.json`, accepts only documented non-secret settings,
-requires `SUPERVISOR_TOKEN`, uses `http://supervisor/core`, and always forces
-read-only operation. App runtime also supplies Supervisor's distinct
+requires `SUPERVISOR_TOKEN`, uses `http://supervisor/core`, and defaults to
+`READ_ONLY=true` / `CONTROL_ENABLED=false`. App runtime also supplies Supervisor's distinct
 `ws://supervisor/core/websocket` endpoint instead of standalone `/api/websocket`
 derivation. Because Supervisor makes that options document root-only, the
 image bootstrap reads it before dropping groups, GID, and UID to the fixed
@@ -107,18 +96,19 @@ exactly. Never combine image publication and catalog promotion in one commit or 
 
 For a full App validation, add the repository to a disposable or approved Home
 Assistant OS/Supervised host, install the App, leave its port disabled for startup,
-verify container/log health, then temporarily assign a local port and test all 24
-tools with MCP Inspector. Remove the port mapping afterward. Never publish it.
+verify container/log health, then temporarily assign a local port and test the
+expected tool count with MCP Inspector. Remove the port mapping afterward. Never
+publish it or enable controls on an unauthenticated public endpoint.
 
 ## Policy-security implementation notes
 
-- `READ_ONLY=true` is the outer hard boundary. A non-read plan is considered only
-  when both the environment value and an optional policy file set read-only false.
-  Phase 6 still has no executor or write-capable client path in that state.
+- `READ_ONLY=true` and `CONTROL_ENABLED=false` are independent outer boundaries.
+  Both must be deliberately disabled/enabled respectively before a non-read plan
+  can execute. A configured policy file adds its own read-only boundary.
 - Copy `policy.example.toml`, edit exact canonical IDs only, and set `POLICY_FILE`
   to its absolute path. The file is strict TOML: unknown keys or invalid values
   fail startup instead of being ignored.
-- Precedence is hard read-only → hard administrative prohibition → protected
+- Precedence is hard read-only → hard controls-disabled → hard administrative prohibition → protected
   entity → entity → domain → operation class → global default.
 - Protected entities may deny or require confirmation, never allow.
 - The planner authorizes only targets already resolved to canonical entity IDs.
@@ -126,7 +116,8 @@ tools with MCP Inspector. Remove the port mapping afterward. Never publish it.
   target/operation limits, or policy exceptions deny the plan.
 - Value checks reject rather than clamp climate, media, light, and fan inputs.
 - Confirmation is an unverified server-challenge model only. There is no
-  `confirmed=true` shortcut and no issuer/verifier in Phase 6.
+  `confirmed=true` shortcut and no issuer/verifier in Phase 7; confirmation-required
+  plans remain blocked.
 - `AuditEvent.safe_json()` recursively bounds and redacts private values. New audit
   fields must receive adversarial redaction tests before use.
 - Area/floor IDs are present on targets for future integration, but location policy
@@ -139,6 +130,22 @@ uv run pytest tests/unit/test_policy_core.py \
   tests/unit/test_policy_config.py tests/unit/test_policy_planning.py
 uv run mypy
 ```
+
+## Opt-in live write validation
+
+Automated tests must never discover or select a writable entity. The first real
+write is limited to one harmless light explicitly named by the operator:
+
+```bash
+RUN_HA_WRITE_TESTS=1
+AMBIENT_HA_TEST_LIGHT_ENTITY=light.explicit_safe_test_light
+```
+
+The validation harness must read and retain the original state, perform one
+harmless action, verify it, restore the original state, and verify restoration.
+It must not write switches, scenes, scripts, locks, alarms, covers/garage doors,
+valves, automations, or climate entities. Phase 7 source does not run this test by
+default and must never infer the entity ID from inventory.
 
 ## Discovery implementation notes
 

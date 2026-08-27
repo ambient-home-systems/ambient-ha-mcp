@@ -50,7 +50,7 @@ class PolicyAction(StrEnum):
 
 
 class OperationClass(StrEnum):
-    """Future write sensitivity classes independent of Home Assistant privileges."""
+    """Write sensitivity classes independent of Home Assistant privileges."""
 
     READ = "read"
     NORMAL_CONTROL = "normal_control"
@@ -76,6 +76,7 @@ class ResolvedTarget(BaseModel):
     floor_id: str | None = None
     capability_known: bool = True
     capability_supported: bool = True
+    capability_reason: str | None = None
 
     @field_validator("entity_id")
     @classmethod
@@ -101,7 +102,7 @@ class ResolvedTarget(BaseModel):
 
 
 class ControlValue(BaseModel):
-    """Typed future control values; invalid forms are rejected, never clamped."""
+    """Typed semantic control values; invalid forms are rejected, never clamped."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -110,8 +111,16 @@ class ControlValue(BaseModel):
     hvac_mode: str | None = None
     brightness_percent: float | None = Field(default=None, ge=0, le=100)
     color_temperature_kelvin: int | None = Field(default=None, gt=0)
+    rgb_color: tuple[int, int, int] | None = None
     volume_level: float | None = Field(default=None, ge=0, le=1)
     fan_percentage: float | None = Field(default=None, ge=0, le=100)
+
+    @field_validator("rgb_color")
+    @classmethod
+    def validate_rgb_color(cls, value: tuple[int, int, int] | None) -> tuple[int, int, int] | None:
+        if value is not None and any(channel < 0 or channel > 255 for channel in value):
+            raise ValueError("RGB channels must be integers from 0 through 255")
+        return value
 
     @field_validator("temperature_unit")
     @classmethod
@@ -177,7 +186,7 @@ class ConfirmationRequirement(BaseModel):
 
 
 class ActionRequest(BaseModel):
-    """Internal dry-run input produced only after semantic target resolution."""
+    """Internal input produced only after semantic target resolution."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -223,7 +232,7 @@ class MassActionResult(BaseModel):
 
 
 class ActionPlan(BaseModel):
-    """Bounded policy plan with no execution capability."""
+    """Bounded policy plan that only the central executor may consume."""
 
     model_config = ConfigDict(extra="forbid")
 

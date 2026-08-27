@@ -63,6 +63,16 @@ class Settings(BaseSettings):
     )
     ignored_diagnostic_entities: str = Field(default="", alias="IGNORED_DIAGNOSTIC_ENTITIES")
     read_only: bool = Field(default=True, alias="READ_ONLY")
+    control_enabled: bool = Field(default=False, alias="CONTROL_ENABLED")
+    control_verification_timeout_seconds: float = Field(
+        default=3.0, ge=0, le=10, alias="CONTROL_VERIFICATION_TIMEOUT_SECONDS"
+    )
+    control_verification_interval_seconds: float = Field(
+        default=0.25, gt=0, le=2, alias="CONTROL_VERIFICATION_INTERVAL_SECONDS"
+    )
+    allowed_switch_entities: str = Field(default="", alias="ALLOWED_SWITCH_ENTITIES")
+    allowed_scene_entities: str = Field(default="", alias="ALLOWED_SCENE_ENTITIES")
+    allowed_script_entities: str = Field(default="", alias="ALLOWED_SCRIPT_ENTITIES")
     policy_file: Path | None = Field(default=None, alias="POLICY_FILE")
 
     @field_validator("home_assistant_url")
@@ -104,6 +114,14 @@ class Settings(BaseSettings):
             )
         if self.history_default_limit > self.history_max_events:
             raise ValueError("HISTORY_DEFAULT_LIMIT must not exceed HISTORY_MAX_EVENTS")
+        if (
+            self.control_verification_timeout_seconds > 0
+            and self.control_verification_interval_seconds
+            > self.control_verification_timeout_seconds
+        ):
+            raise ValueError(
+                "CONTROL_VERIFICATION_INTERVAL_SECONDS must not exceed the verification timeout"
+            )
         return self
 
     @property
@@ -124,6 +142,35 @@ class Settings(BaseSettings):
             for item in self.ignored_diagnostic_entities.split(",")
             if item.strip()
         )
+
+    @property
+    def explicitly_allowed_control_entities(self) -> dict[str, frozenset[str]]:
+        """Return exact entity allowlists for domains that are denied by default."""
+        return {
+            "switch": _entity_id_list(self.allowed_switch_entities, "switch"),
+            "scene": _entity_id_list(self.allowed_scene_entities, "scene"),
+            "script": _entity_id_list(self.allowed_script_entities, "script"),
+        }
+
+
+def _entity_id_list(value: str, expected_domain: str) -> frozenset[str]:
+    result: set[str] = set()
+    for item in value.split(","):
+        entity_id = item.strip().casefold()
+        if not entity_id:
+            continue
+        domain, separator, object_id = entity_id.partition(".")
+        if domain != expected_domain or not separator or not object_id:
+            raise ValueError(
+                f"{expected_domain} control allowlists require exact {expected_domain} entity IDs"
+            )
+        if not all(
+            character.islower() or character.isdigit() or character == "_"
+            for character in object_id
+        ):
+            raise ValueError("control allowlists contain an invalid entity ID")
+        result.add(entity_id)
+    return frozenset(result)
 
 
 @lru_cache(maxsize=1)

@@ -21,7 +21,7 @@ def target(entity_id: str, **kwargs: object) -> ResolvedTarget:
 
 
 def writable_engine(**kwargs: object) -> PolicyEngine:
-    return PolicyEngine(PolicyConfig(read_only=False, **kwargs))
+    return PolicyEngine(PolicyConfig(read_only=False, **kwargs), control_enabled=True)
 
 
 def test_read_is_allowed_but_hard_read_only_denies_every_control() -> None:
@@ -57,6 +57,18 @@ def test_conservative_domain_defaults(
     decision = writable_engine().evaluate(operation, target=target(entity_id))
 
     assert decision.decision is expected
+
+
+def test_scene_exact_allow_still_requires_unspoofable_confirmation() -> None:
+    engine = writable_engine(entity_rules={"scene.reading": "allow"})
+
+    result = engine.evaluate(
+        OperationClass.SCENE_EXECUTION,
+        target=target("scene.reading"),
+    )
+
+    assert result.decision is PolicyAction.CONFIRM_REQUIRED
+    assert result.matched_rule == "phase7.scene_confirmation_required"
 
 
 def test_administrative_is_hard_denied_even_when_an_entity_rule_allows() -> None:
@@ -189,7 +201,8 @@ def test_media_light_and_fan_value_limits_reject_without_clamping() -> None:
                 max_color_temperature_kelvin=6500,
                 max_fan_percentage=75,
             ),
-        )
+        ),
+        control_enabled=True,
     )
     cases = [
         ("media_player.den", ControlValue(volume_level=0.51)),
@@ -206,6 +219,18 @@ def test_media_light_and_fan_value_limits_reject_without_clamping() -> None:
         )
         assert result.decision is PolicyAction.DENY
         assert result.matched_rule == "value_policy"
+
+
+def test_control_enable_is_a_second_hard_boundary() -> None:
+    engine = PolicyEngine(PolicyConfig(read_only=False), control_enabled=False)
+
+    result = engine.evaluate(
+        OperationClass.NORMAL_CONTROL,
+        target=target("light.kitchen"),
+    )
+
+    assert result.decision is PolicyAction.DENY
+    assert result.matched_rule == "hard_boundary.controls_disabled"
 
 
 def test_unknown_operation_and_policy_runtime_exception_fail_closed(

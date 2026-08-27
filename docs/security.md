@@ -2,15 +2,15 @@
 
 ## Current posture
 
-This release is a local/private, read-only foundation. It does not implement
-bridge OAuth, user management, service execution, device control, Home Assistant
-administration, or supported public-internet exposure.
+This release remains local/private and does not implement bridge OAuth, public-user
+authentication, Home Assistant administration, or supported public-internet
+exposure. The validated v0.6.9 baseline is read only.
 
-Phase 6 adds authorization and write-preparation architecture only. Phase 6.5 adds
-Home Assistant App packaging and Supervisor authentication, not control. Neither
-phase introduces an MCP write tool, Home Assistant service-call path, central
-executor, confirmation verification endpoint, or persistent audit store. Dry-run
-plans always state that execution is unavailable.
+Phase 7 adds seven exact-target semantic control tools and one central executor.
+Execution is disabled by default and requires both `READ_ONLY=false` and
+`CONTROL_ENABLED=true`, followed by capability, policy, value, mass-action,
+verification, and audit checks. There is no generic service tool, confirmation
+verification endpoint, or persistent audit store.
 
 ## Security objectives
 
@@ -56,8 +56,9 @@ before target resolution; credential and service-data leakage; privilege confusi
 and attempted generic service or Home Assistant administrative actions.
 
 The current controls do not authenticate public users, rate-limit a public service,
-verify confirmations, inspect complete scene/script effects, or execute actions.
-Those omissions are explicit: public exposure and all writes remain unsupported.
+verify confirmations, or inspect complete scene/script effects. Public exposure is
+unsupported. Confirmation-required actions remain blocked; exact policy may allow a
+specific scene or script only after an operator separately reviews its effects.
 
 ## Credentials
 
@@ -96,8 +97,9 @@ unauthenticated reverse proxy.
 
 Home Assistant long-lived tokens inherit the permissions of their user. Create a
 dedicated Home Assistant user for the bridge and grant no more access than the
-deployment requires. The bridge performs authenticated REST `GET` requests and
-read-only WebSocket registry commands only.
+deployment requires. The bridge performs authenticated REST reads and, only after
+the complete Phase 7 pipeline authorizes an action, a fixed allowlisted REST
+service call. WebSocket use remains read/discovery-only.
 
 Phase 5 configuration and trace enrichment may require an administrator-capable
 Home Assistant account. **Home Assistant administrator credentials do not grant
@@ -182,7 +184,7 @@ optional exception information. Bearer values and common credential assignments
 are redacted as defense in depth. Code must still avoid logging request headers,
 environment dumps, raw Home Assistant responses, or URLs containing secrets.
 
-Phase 6 audit events use the same principle with recursive, bounded sanitization.
+Phase 7 audit events use the same principle with recursive, bounded sanitization.
 Authorization headers, tokens, passwords, API keys, webhook values, URLs, camera
 streams, commands, shell data, notification/message content, and credential-like
 keys are redacted. The audit sink is an abstraction with an optional structured-log
@@ -210,24 +212,24 @@ The shipped defaults are conservative:
 | Scope | Default |
 | --- | --- |
 | Read | Allow |
-| Light, fan | Allow when hard read-only is eventually disabled |
+| Light, fan | Allow only after both global execution gates are enabled |
 | Media player | Allow subject to volume bounds |
 | Climate | Allow subject to temperature and HVAC-mode bounds |
 | Switch | Deny unless an exact entity is explicitly authorized |
 | Cover | Confirmation required; garage covers should normally be protected/denied |
 | Scene | Confirmation required because effects may be opaque |
-| Script | Deny unless an exact canonical entity is explicitly authorized later |
+| Script | Deny unless an exact canonical entity is explicitly authorized |
 | Lock, alarm control panel, valve | Deny |
 | Automation execution/editing and HA administration | Hard deny |
 
-These rule defaults do not make Phase 6 capable of execution. `READ_ONLY=true`
-still denies all non-read planning, and no writer exists.
+These rule defaults do not bypass the global gates. `READ_ONLY=true` or
+`CONTROL_ENABLED=false` denies every non-read plan before any service call.
 
 ### Policy precedence
 
-Precedence is deterministic: hard read-only, hard administrative prohibition,
-protected entity, explicit entity rule, domain rule, operation-class rule, global
-default. A broad allow cannot override a more specific deny. Protected entities
+Precedence is deterministic: hard read-only, hard controls-disabled, hard
+administrative prohibition, protected entity, explicit entity rule, domain rule,
+operation-class rule, global default. A broad allow cannot override a more specific deny. Protected entities
 may only deny or require confirmation; configuration cannot mark them allowed.
 
 Policy configuration is strict TOML selected by `POLICY_FILE`. Unknown keys,
@@ -236,9 +238,9 @@ invalid ranges, contradictory minimum/maximum bounds, and attempts to deny the
 READ operation fail configuration loading. Entity/domain keys are trimmed and
 case-normalized, and duplicates after normalization are rejected.
 
-Hard read-only is fail-safe across two sources: non-read planning is possible only
-when both `READ_ONLY=false` and the policy file has `read_only=false`. With no
-policy file, the file-level default remains true.
+When a policy file is configured, non-read planning requires `READ_ONLY=false` in
+both the environment and file. Without a policy file, the environment value is the
+read-only boundary. In both cases `CONTROL_ENABLED=true` is independently required.
 
 ### Target and mass-action boundary
 
@@ -281,8 +283,8 @@ validated server configuration. Jinja remains inert and is never executed.
 
 `confirm_required` produces a scoped `required_unverified` confirmation requirement
 with a correlation ID and a future server-verifiable challenge concept. No model
-accepts a caller-supplied `confirmed=true` flag. Phase 6 has no confirmation issuer,
-verifier, or executor, so confirmation cannot cause an action. A later phase must
+accepts a caller-supplied `confirmed=true` flag. Phase 7 has no confirmation issuer
+or verifier, so confirmation-required plans cannot cause an action. A later phase must
 define expiration, replay protection, identity binding, and server verification.
 
 ### Known limitations
@@ -292,11 +294,12 @@ define expiration, replay protection, identity binding, and server verification.
 - Scene and script effects are not introspected and remain opaque.
 - Confirmation verification, bridge-user identity, replay protection, durable
   audit storage, and request-rate enforcement are not implemented.
-- Live Home Assistant validation has not run because credentials were unavailable.
-- There is intentionally no write path to validate in Phase 6.
-- The Home Assistant App package has not yet been installed on a real Supervisor
-  host, and the versioned GHCR image cannot be install-tested until it is published
-  and public.
+- The v0.6.9 read-only App baseline passed real Home Assistant validation. Phase 7
+  has not performed a real write and automated tests never select or mutate a live
+  entity.
+- The first live write requires explicit opt-in and an explicitly designated
+  harmless light, with original-state capture, verification, restoration, and
+  restoration verification.
 - `homeassistant_api` gives the App's token the Home Assistant access assigned by
   Supervisor; Ambient's read-only boundary remains required defense in depth.
 

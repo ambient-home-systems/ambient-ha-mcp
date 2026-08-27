@@ -1,7 +1,9 @@
+import json
 import ssl
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from ambient_ha.ha.exceptions import (
     HomeAssistantAuthenticationError,
@@ -13,6 +15,7 @@ from ambient_ha.ha.exceptions import (
     HomeAssistantUnreachableError,
 )
 from ambient_ha.ha.rest import HomeAssistantRestAPI
+from ambient_ha.models.control import ControlServiceCall
 
 
 def make_api(transport: httpx.AsyncBaseTransport, token: str | None = None) -> HomeAssistantRestAPI:
@@ -117,6 +120,90 @@ async def test_get_states_rejects_malformed_payload() -> None:
 
     with pytest.raises(HomeAssistantUnexpectedResponse, match="state data"):
         await make_api(transport).get_states()
+
+
+@pytest.mark.anyio
+async def test_control_service_call_uses_authenticated_bounded_post() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == "/api/services/light/turn_on"
+        assert request.headers["Authorization"] == "Bearer test-secret-token"
+        assert json.loads(request.content) == {
+            "entity_id": ["light.kitchen"],
+            "brightness_pct": 50.0,
+        }
+        return httpx.Response(200, json=[], request=request)
+
+    await make_api(httpx.MockTransport(handler)).call_control_service(
+        ControlServiceCall(
+            domain="light",
+            service="turn_on",
+            entity_ids=["light.kitchen"],
+            data={"brightness_pct": 50.0},
+        )
+    )
+
+
+@pytest.mark.anyio
+async def test_control_service_rejects_unexpected_response_without_echoing_body() -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json={"token": "must-not-escape"},
+            request=request,
+        )
+    )
+
+    with pytest.raises(HomeAssistantUnexpectedResponse) as captured:
+        await make_api(transport).call_control_service(
+            ControlServiceCall(
+                domain="switch",
+                service="turn_off",
+                entity_ids=["switch.safe"],
+            )
+        )
+
+    assert "must-not-escape" not in str(captured.value)
+
+
+def test_internal_service_model_rejects_arbitrary_or_cross_domain_calls() -> None:
+    for values in (
+        {
+            "domain": "script",
+            "service": "reload",
+            "entity_ids": ["script.safe"],
+        },
+        {
+            "domain": "switch",
+            "service": "turn_on",
+            "entity_ids": ["lock.front"],
+        },
+        {
+            "domain": "media_player",
+            "service": "media_play",
+            "entity_ids": ["media_player.den"],
+            "data": {"media_content_id": "https://private.example/stream"},
+        },
+        {
+            "domain": "media_player",
+            "service": "volume_set",
+            "entity_ids": ["media_player.den"],
+            "data": {},
+        },
+        {
+            "domain": "light",
+            "service": "turn_off",
+            "entity_ids": ["light.kitchen"],
+            "data": {"brightness_pct": 50},
+        },
+        {
+            "domain": "light",
+            "service": "turn_on",
+            "entity_ids": ["light.kitchen", "light.kitchen"],
+        },
+    ):
+        with pytest.raises(ValidationError):
+            ControlServiceCall.model_validate(values)
 
 
 @pytest.mark.anyio

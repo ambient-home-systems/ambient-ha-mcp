@@ -1,5 +1,5 @@
-# Phase 6 remains non-executable even if this is false. Keep both this value and
-# READ_ONLY=true until a later, separately reviewed execution phase exists.
+# Phase 7 execution also requires CONTROL_ENABLED=true in the runtime environment.
+# Keep this true until controls have been deliberately reviewed and configured.
 read_only = true
 global_default = "deny"
 
@@ -30,6 +30,8 @@ automation = "deny"
 # never assumes that a target exists or is safe.
 [entity_rules]
 # "switch.desk_lamp" = "allow"
+# "scene.reading" = "allow"
+# "script.safe_chime" = "allow"
 
 [protected_entities]
 # "lock.front_door" = "deny"

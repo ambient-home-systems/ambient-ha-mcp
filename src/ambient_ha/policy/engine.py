@@ -15,8 +15,14 @@ from ambient_ha.policy.models import (
 class PolicyEngine:
     """Evaluate canonical targets independently of the MCP client and HA token."""
 
-    def __init__(self, config: PolicyConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: PolicyConfig | None = None,
+        *,
+        control_enabled: bool = False,
+    ) -> None:
         self.config = config or PolicyConfig()
+        self.control_enabled = control_enabled
 
     def evaluate(
         self,
@@ -59,6 +65,14 @@ class PolicyEngine:
                 "Hard read-only mode denies every non-read operation.",
                 "hard_boundary.read_only",
             )
+        if not self.control_enabled and operation is not OperationClass.READ:
+            return self._decision(
+                PolicyAction.DENY,
+                operation,
+                target,
+                "Home Assistant controls are disabled by the server-wide control gate.",
+                "hard_boundary.controls_disabled",
+            )
         if operation is OperationClass.ADMINISTRATIVE:
             return self._decision(
                 PolicyAction.DENY,
@@ -85,6 +99,14 @@ class PolicyEngine:
             )
 
         rule_action, matched_rule = self._matched_action(operation, target)
+        if operation is OperationClass.SCENE_EXECUTION and rule_action is not PolicyAction.DENY:
+            return self._decision(
+                PolicyAction.CONFIRM_REQUIRED,
+                operation,
+                target,
+                "Scenes remain blocked until server-verifiable confirmation is implemented.",
+                "phase7.scene_confirmation_required",
+            )
         if rule_action in {PolicyAction.ALLOW, PolicyAction.CONFIRM_REQUIRED}:
             value_error = self._value_error(target, value)
             if value_error is not None:

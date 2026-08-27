@@ -43,7 +43,9 @@ def request(*targets: ResolvedTarget, **kwargs: object) -> ActionRequest:
 
 
 def planner(**config: object) -> ActionPlanner:
-    return ActionPlanner(PolicyEngine(PolicyConfig(read_only=False, **config)))
+    return ActionPlanner(
+        PolicyEngine(PolicyConfig(read_only=False, **config), control_enabled=True)
+    )
 
 
 def test_dry_run_allows_safe_target_but_never_becomes_executable() -> None:

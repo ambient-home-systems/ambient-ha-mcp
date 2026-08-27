@@ -55,7 +55,7 @@ class PolicyLimits(BaseModel):
 
 
 class ValueLimits(BaseModel):
-    """Future semantic-control bounds; out-of-range values are rejected."""
+    """Semantic-control bounds; out-of-range values are rejected."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -104,7 +104,7 @@ class ValueLimits(BaseModel):
 
 
 class PolicyConfig(BaseModel):
-    """Validated Phase 6 policy configuration.
+    """Validated server-side policy configuration.
 
     Area and floor policy are deliberately deferred.  Canonical location IDs are
     carried by planning models, but authorization is not based on display names.
@@ -163,10 +163,15 @@ def load_policy_file(path: Path) -> PolicyConfig:
 def effective_policy_config(*, environment_read_only: bool, path: Path | None) -> PolicyConfig:
     """Combine environment and file boundaries using fail-safe read-only precedence.
 
-    Disabling write protection requires both the environment and policy file to
-    explicitly set ``read_only = false``.  An absent file retains safe defaults.
+    A policy file adds a second read-only boundary when present. Without one, the
+    environment boundary is authoritative; the separate CONTROL_ENABLED gate is
+    still required by the policy engine before any Phase 7 execution.
     """
-    config = load_policy_file(path) if path is not None else PolicyConfig()
+    config = (
+        load_policy_file(path)
+        if path is not None
+        else PolicyConfig(read_only=environment_read_only)
+    )
     return config.model_copy(update={"read_only": environment_read_only or config.read_only})
 
 

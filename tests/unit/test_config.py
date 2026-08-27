@@ -16,6 +16,7 @@ def test_required_configuration_and_defaults() -> None:
     assert settings.home_assistant_token.get_secret_value() == "secret"
     assert settings.log_level == "INFO"
     assert settings.read_only is True
+    assert settings.control_enabled is False
     assert settings.registry_cache_ttl_seconds == 60
     assert settings.history_default_lookback_hours == 24
     assert settings.history_max_lookback_hours == 168
@@ -25,6 +26,35 @@ def test_required_configuration_and_defaults() -> None:
     assert settings.battery_warning_threshold == 20
     assert settings.ignored_diagnostic_entity_ids == frozenset()
     assert settings.policy_file is None
+    assert settings.explicitly_allowed_control_entities == {
+        "switch": frozenset(),
+        "scene": frozenset(),
+        "script": frozenset(),
+    }
+
+
+def test_exact_control_allowlists_are_normalized_and_domain_scoped() -> None:
+    settings = Settings(
+        HOME_ASSISTANT_URL="http://homeassistant.local:8123",
+        HOME_ASSISTANT_TOKEN="secret",
+        ALLOWED_SWITCH_ENTITIES="switch.Desk_Lamp, switch.desk_lamp",
+        ALLOWED_SCENE_ENTITIES="scene.Reading",
+        ALLOWED_SCRIPT_ENTITIES="script.Safe_Chime",
+    )
+
+    assert settings.explicitly_allowed_control_entities == {
+        "switch": frozenset({"switch.desk_lamp"}),
+        "scene": frozenset({"scene.reading"}),
+        "script": frozenset({"script.safe_chime"}),
+    }
+
+    invalid = Settings(
+        HOME_ASSISTANT_URL="http://homeassistant.local:8123",
+        HOME_ASSISTANT_TOKEN="secret",
+        ALLOWED_SWITCH_ENTITIES="light.wrong",
+    )
+    with pytest.raises(ValueError):
+        _ = invalid.explicitly_allowed_control_entities
 
 
 @pytest.mark.parametrize("ttl", [4, 3601])

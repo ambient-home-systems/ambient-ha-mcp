@@ -1,12 +1,9 @@
 # MCP tool contracts
 
-All tools are read-only and return structured models. Errors use stable codes and
-safe messages; normal not-found and unsupported-feature outcomes are represented
-in the result rather than raised as generic failures.
-
-Phases 6 and 6.5 intentionally add no public MCP tool. The discovery surface
-remains 24 read-only tools. Policy planning, confirmation requirements, and audit events are
-internal architecture only and cannot execute a Home Assistant operation.
+The server exposes 24 read-only tools and seven Phase 7 semantic control tools.
+Every result uses a structured model and safe messages. Normal not-found,
+unsupported, denied, confirmation-required, and unverified outcomes are represented
+explicitly rather than raised as generic failures.
 
 ## Diagnostics
 
@@ -283,7 +280,59 @@ New tools must describe a recognizable user goal, expose the smallest useful
 schema, normalize every upstream payload, bound arrays, and make partial data
 explicit. Do not add a generic REST, WebSocket, or service-call escape hatch.
 
-## Phase 6 internal policy contracts
+## Phase 7 semantic controls
+
+All control tools require a non-empty list of exact canonical entity IDs. Display
+names, areas, floors, and fuzzy matches are not writable targets; use
+`ha_search_entities` first. No control schema contains `confirmed`, arbitrary
+service names, raw payloads, URLs, script variables, or automation-trigger data.
+
+### `ha_control_light(entity_ids, action, brightness_percent?, color_temperature_kelvin?, rgb_color?)`
+
+Supports `on` and `off`. Optional values are valid only with `on` and execute only
+when Home Assistant reports the corresponding capability. RGB contains exactly
+three integer channels from 0 through 255.
+
+### `ha_control_fan(entity_ids, action, percentage?)`
+
+Supports `on` and `off`; percentage is valid only with `on` and only for entities
+reporting percentage/speed capability.
+
+### `ha_control_media_player(entity_ids, action, volume_level?)`
+
+Supports `play`, `pause`, `stop`, `volume`, `mute`, and `unmute` subject to reported
+feature flags. Volume is normalized from 0 through the configured policy maximum.
+Arbitrary media content and URLs are never accepted.
+
+### `ha_control_climate(entity_ids, target_temperature?, temperature_unit?, hvac_mode?)`
+
+Requires at least a temperature or HVAC mode. Temperature requires `C` or `F`, is
+converted to Home Assistant's configured unit, and must pass both device and policy
+bounds. HVAC mode must be reported by the device and allowed by policy.
+
+### `ha_control_switch(entity_ids, action)`
+
+Supports `on` and `off`, but the switch domain is denied by default. Every exact ID
+must be explicitly allowed by policy or the App allowlist.
+
+### `ha_activate_scene(entity_ids)`
+
+Scenes require confirmation by default. Because Phase 7 has no confirmation
+verifier, scenes remain blocked even if an exact rule requests `allow`. Scene effects
+have no stable state-verification contract; a later phase must add secure confirmation
+before successful service acceptance can be possible.
+
+### `ha_run_script(entity_ids)`
+
+Scripts are denied by default and require an exact allow rule. The tool accepts no
+variables or service data. Successful acceptance is not mislabeled as state
+verification.
+
+Control statuses are `verified`, `accepted`, `partially_verified`, `failed`,
+`denied`, `confirmation_required`, `clarification_required`, `read_only`,
+`controls_disabled`, and `unsupported`.
+
+## Internal policy and execution contracts
 
 These are application models, not callable MCP tools:
 
@@ -296,10 +345,12 @@ These are application models, not callable MCP tools:
   no caller-spoofable confirmation field.
 - `ActionPlan` explicitly lists allowed, denied, and confirmation targets; limit
   results; sanitized predicted service data; ambiguity; and confirmation state.
-  It always has `executable: false` and `execution_available: false` in Phase 6.
+  It becomes executable only for an all-allow decision inside the Phase 7 executor.
 - `AuditEvent` records policy facts without tokens, authorization data, webhooks,
   URLs, camera streams, command/message content, or other secret-like service data.
 
 The planner denies unknown capabilities, ambiguous targets, missing canonical
 targets, excessive targets/operations, value-policy violations, and any policy
-failure. It does not perform partial execution and makes no network call.
+failure. It does not perform partial execution and makes no network call. The one
+`ActionExecutor` owns pre-write audit, the fixed service call, bounded fresh-state
+verification, and final audit.

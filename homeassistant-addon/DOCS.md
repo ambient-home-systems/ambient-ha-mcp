@@ -4,9 +4,10 @@ This experimental Home Assistant App runs the same Ambient MCP server image as t
 standalone deployment. It uses Home Assistant Supervisor's Core API proxy and the
 short-lived `SUPERVISOR_TOKEN`; no long-lived access token is entered in App options.
 
-Phase 6.6 remains strictly read only. The launcher always sets `READ_ONLY=true`,
-and the published MCP surface contains only the 24 Phase 1–5 read tools. Phase 6
-policy planning types are not executable and are not exposed as MCP tools.
+The validated v0.6.9 baseline contains 24 read-only tools. Phase 7 adds seven
+semantic control tools through one central executor. Fresh installs and upgrades
+remain read only because `read_only` defaults to true and `control_enabled` defaults
+to false. Both settings must be deliberately changed before any control can execute.
 
 ## Install
 
@@ -19,19 +20,18 @@ policy planning types are not executable and are not exposed as MCP tools.
    or `/health` endpoint for liveness.
 
 The public multi-architecture image exists at
-`ghcr.io/ambient-home-systems/ambient-ha-mcp:0.6.8`, matching the currently
+`ghcr.io/ambient-home-systems/ambient-ha-mcp:0.6.9`, matching the currently
 advertised `config.yaml` version. New versions are never advertised until their
 versioned `amd64` and `aarch64` images and manifest are already pullable.
 
 The launcher reads Supervisor's root-only options document during a minimal
 container bootstrap, then drops to the unprivileged `ambient` user before the MCP
 server starts. Version `0.6.5` could install but could not complete this startup.
-The `0.6.9` candidate selects Supervisor's documented
+Version `0.6.9` selects Supervisor's documented
 `ws://supervisor/core/websocket` proxy for registry and automation reads, bypasses
 system proxy discovery for that internal connection, prevents DEBUG frame logging,
 and accepts bounded registry messages up to 16 MiB rather than inheriting the
-dependency's 1 MiB default. It becomes an offered update only after image-first
-publication and verification complete.
+dependency's 1 MiB default. Its complete 24-tool live validation passed.
 
 ## Local endpoint access
 
@@ -47,17 +47,16 @@ proxy and is not the authentication boundary for an MCP client.
 
 ## Options
 
-Options only tune safe, bounded read behavior: logging, request/cache timeouts, history
-bounds, low-battery diagnostics, diagnostic exclusions, and the MCP Host allowlist.
-There is no token option and no option that disables read-only mode.
+The currently advertised v0.6.9 metadata exposes bounded read options only. After
+the v0.7.0 image is published and verified, its separate catalog-promotion PR must
+atomically add the two control gates and exact switch/scene/script allowlists while
+defaulting to read-only/disabled. There is never a token, generic service,
+script-variable, or arbitrary-payload option.
 
 ## Security limitations
 
 Home Assistant authenticates the App to Core through Supervisor. That does **not**
 authenticate clients connecting to the MCP HTTP endpoint. Keep the endpoint local and
 disabled when not testing. Remote ChatGPT connectivity requires a separately designed
-authenticated deployment and is outside Phase 6.6.
-
-Live validation against a real Home Assistant instance must pass before any Phase 7
-write/control work can begin. Use the repository's Phase 6.6 sanitized validation
-template when returning installation results.
+authenticated deployment and remains outside Phase 7. Do not enable controls on a
+publicly reachable MCP port.

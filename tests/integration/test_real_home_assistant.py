@@ -7,6 +7,7 @@ from mcp import Client
 
 from ambient_ha.config import Settings
 from ambient_ha.ha.client import HomeAssistantClient
+from ambient_ha.models.control import ControlAction, ControlDomain, ControlIntent, ControlStatus
 from ambient_ha.models.discovery import EntitySearchFilters
 from ambient_ha.models.history import RecentChangesFilters
 from ambient_ha.models.home import (
@@ -15,6 +16,8 @@ from ambient_ha.models.home import (
     OpeningFilters,
     UnavailableEntityFilters,
 )
+from ambient_ha.policy import ActionPlanner, PolicyConfig, PolicyEngine
+from ambient_ha.policy.execution import ActionExecutor
 from ambient_ha.server import build_mcp_server
 
 EXPECTED_TOOLS = {
@@ -42,6 +45,13 @@ EXPECTED_TOOLS = {
     "ha_get_automation_traces",
     "ha_get_automation_trace",
     "ha_find_activity_cause",
+    "ha_control_light",
+    "ha_control_fan",
+    "ha_control_media_player",
+    "ha_control_climate",
+    "ha_control_switch",
+    "ha_activate_scene",
+    "ha_run_script",
 }
 SENSITIVE_KEY_MARKERS = {
     "access_token",
@@ -92,7 +102,9 @@ async def test_real_home_assistant_connection() -> None:
     if not os.environ.get("HOME_ASSISTANT_URL") or not os.environ.get("HOME_ASSISTANT_TOKEN"):
         pytest.skip("Secure Home Assistant integration credentials are unavailable")
 
-    settings = Settings()  # type: ignore[call-arg]
+    settings = Settings().model_copy(  # type: ignore[call-arg]
+        update={"read_only": True, "control_enabled": False}
+    )
     client = HomeAssistantClient(settings)
     result = await client.check_connection()
 
@@ -273,8 +285,87 @@ async def test_real_home_assistant_connection() -> None:
                 "ha_find_activity_cause",
                 {"entity_id": entity_id, "start": start, "limit": 5},
             ),
+            (
+                "ha_control_light",
+                {"entity_ids": ["light.ambient_validation_missing"], "action": "off"},
+            ),
+            (
+                "ha_control_fan",
+                {"entity_ids": ["fan.ambient_validation_missing"], "action": "off"},
+            ),
+            (
+                "ha_control_media_player",
+                {"entity_ids": ["media_player.ambient_validation_missing"], "action": "pause"},
+            ),
+            (
+                "ha_control_climate",
+                {"entity_ids": ["climate.ambient_validation_missing"], "hvac_mode": "off"},
+            ),
+            (
+                "ha_control_switch",
+                {"entity_ids": ["switch.ambient_validation_missing"], "action": "off"},
+            ),
+            ("ha_activate_scene", {"entity_ids": ["scene.ambient_validation_missing"]}),
+            ("ha_run_script", {"entity_ids": ["script.ambient_validation_missing"]}),
         ]
         for tool_name, arguments in tool_calls:
             tool_result = await mcp_client.call_tool(tool_name, arguments)
             assert not tool_result.is_error, tool_name
             _assert_private_data_absent(tool_result.structured_content)
+
+
+@pytest.mark.integration
+@pytest.mark.anyio
+async def test_explicit_safe_light_write_and_restore() -> None:
+    """Opt-in only: toggle one operator-designated light and restore its state."""
+    if os.environ.get("RUN_HA_WRITE_TESTS") != "1":
+        pytest.skip("Set RUN_HA_WRITE_TESTS=1 for the explicit safe-light write test")
+    entity_id = os.environ.get("AMBIENT_HA_TEST_LIGHT_ENTITY", "").strip().casefold()
+    if not entity_id.startswith("light.") or len(entity_id.partition(".")[2]) == 0:
+        pytest.skip("Set AMBIENT_HA_TEST_LIGHT_ENTITY to one explicit harmless light ID")
+    if not os.environ.get("HOME_ASSISTANT_URL") or not os.environ.get("HOME_ASSISTANT_TOKEN"):
+        pytest.skip("Secure Home Assistant integration credentials are unavailable")
+
+    settings = Settings().model_copy(  # type: ignore[call-arg]
+        update={"read_only": False, "control_enabled": True}
+    )
+    client = HomeAssistantClient(settings)
+    original = await client.get_entity(entity_id)
+    assert original is not None, "The explicitly designated light does not exist"
+    assert original.domain == "light"
+    assert original.available is True
+    assert original.state in {"on", "off"}, "The designated light must have a stable on/off state"
+
+    runner = ActionExecutor(
+        client,
+        ActionPlanner(
+            PolicyEngine(PolicyConfig(read_only=False), control_enabled=True),
+            execution_available=True,
+        ),
+    )
+    test_action = ControlAction.OFF if original.state == "on" else ControlAction.ON
+    restore_action = ControlAction.ON if original.state == "on" else ControlAction.OFF
+
+    try:
+        changed = await runner.execute(
+            ControlIntent(
+                mcp_tool="integration_explicit_safe_light",
+                domain=ControlDomain.LIGHT,
+                action=test_action,
+                entity_ids=[entity_id],
+            )
+        )
+        assert changed.status is ControlStatus.VERIFIED
+    finally:
+        restored = await runner.execute(
+            ControlIntent(
+                mcp_tool="integration_explicit_safe_light_restore",
+                domain=ControlDomain.LIGHT,
+                action=restore_action,
+                entity_ids=[entity_id],
+            )
+        )
+        assert restored.status is ControlStatus.VERIFIED
+        final = await client.get_entity(entity_id)
+        assert final is not None
+        assert final.state == original.state

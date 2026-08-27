@@ -18,6 +18,7 @@ from ambient_ha.ha.discovery import DiscoveryResolver
 from ambient_ha.ha.home import HomeAnalyzer
 from ambient_ha.models import ConnectionStatus, HomeAssistantServerInfo
 from ambient_ha.models.automation import ActivityCauseReport, CausalityEvidence
+from ambient_ha.models.control import ControlServiceCall
 from ambient_ha.models.discovery import EntitySearchFilters
 from ambient_ha.models.history import (
     EntityHistoryPage,
@@ -206,6 +207,19 @@ class FakeGateway:
             complete=True,
         )
 
+    async def resolve_control_entities(self, entity_ids: list[str]):
+        entities = [
+            self.resolver.entity(state)
+            for entity_id in entity_ids
+            for state in STATES
+            if state["entity_id"] == entity_id
+        ]
+        found = {entity.entity_id for entity in entities}
+        return entities, [entity_id for entity_id in entity_ids if entity_id not in found]
+
+    async def execute_control(self, _call: ControlServiceCall) -> None:
+        raise AssertionError("read-only MCP test must never execute a control")
+
 
 @pytest.mark.anyio
 async def test_mcp_diagnostic_tools_are_callable_in_memory(settings: Settings) -> None:
@@ -324,7 +338,7 @@ async def test_mcp_home_diagnostic_tools_are_registered_and_callable(settings: S
         "ha_get_lights_on",
         "ha_diagnose_home",
     } <= names
-    assert len(names) == 24
+    assert len(names) == 31
     assert summary.structured_content["summary"]["total_entities"] == len(HOME_STATES)
     assert unavailable.structured_content["result"]["total_matches"] == 1
     assert batteries.structured_content["result"]["total_matches"] == 1
@@ -371,3 +385,48 @@ async def test_mcp_automation_tools_are_registered_and_callable(settings: Settin
     assert traces.structured_content["result"]["total_traces"] == 1
     assert trace.structured_content["trace"]["run_id"] == "run-1"
     assert cause.structured_content["result"]["evidence"][0]["confidence"] == "confirmed"
+
+
+@pytest.mark.anyio
+async def test_mcp_control_surface_is_semantic_and_safe_by_default(settings: Settings) -> None:
+    server = build_mcp_server(settings, client=FakeGateway())
+
+    async with Client(server) as client:
+        listed = await client.list_tools()
+        result = await client.call_tool(
+            "ha_control_light",
+            {"entity_ids": ["light.kitchen_ceiling"], "action": "off"},
+        )
+
+    tools = {tool.name: tool for tool in listed.tools}
+    assert {
+        "ha_control_light",
+        "ha_control_fan",
+        "ha_control_media_player",
+        "ha_control_climate",
+        "ha_control_switch",
+        "ha_activate_scene",
+        "ha_run_script",
+    } <= tools.keys()
+    assert "ha_call_service" not in tools
+    assert not {
+        "ha_control_lock",
+        "ha_control_alarm",
+        "ha_control_cover",
+        "ha_control_garage_door",
+        "ha_control_valve",
+        "ha_press_button",
+        "ha_trigger_automation",
+        "ha_restart",
+    }.intersection(tools)
+    for name in (
+        "ha_control_light",
+        "ha_control_fan",
+        "ha_control_media_player",
+        "ha_control_climate",
+        "ha_control_switch",
+        "ha_activate_scene",
+        "ha_run_script",
+    ):
+        assert "confirmed" not in tools[name].input_schema.get("properties", {})
+    assert result.structured_content["status"] == "read_only"

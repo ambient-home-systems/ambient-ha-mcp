@@ -35,7 +35,10 @@ contract and the rollback mechanism.
 ### Stage 2 — promote the App catalog
 
 1. Open a separate PR that changes the advertised version in
-   `homeassistant-addon/config.yaml` to the already published version.
+   `homeassistant-addon/config.yaml` to the already published version. If the new
+   image introduces App options, add their schema, safe defaults, and translations
+   in this same promotion PR—not in the earlier source PR—so the old advertised
+   image is never paired with options it cannot parse.
 2. Do not include runtime code changes in the catalog-promotion PR.
 3. CI runs `Verify advertised App image exists`. It fails closed unless the exact
    public versioned manifest contains both supported platforms.
