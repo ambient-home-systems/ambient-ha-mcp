@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.9
+
+- Accept bounded Home Assistant registry responses up to 16 MiB instead of inheriting
+  the WebSocket dependency's 1 MiB default, which closed larger real inventories with
+  code 1009.
+- Preserve the internal Supervisor route, proxy bypass, App permissions, token-safe
+  logging, 24 read-only tools, and Phase 7 gate.
+
 ## 0.6.8
 
 - Bypass inherited system proxy configuration for the internal Supervisor

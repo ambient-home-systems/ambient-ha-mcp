@@ -29,6 +29,10 @@ _NOT_FOUND_CODES = {"not_found"}
 _AUTHORIZATION_CODES = {"unauthorized"}
 T = TypeVar("T")
 _TRANSPORT_LOGGER = logging.getLogger("ambient_ha.ha.websocket.transport")
+# Home Assistant registry snapshots can exceed websockets' 1 MiB default on real
+# installations. Keep the read transport useful for large inventories while retaining
+# an explicit ceiling against unexpectedly large upstream messages.
+_MAX_MESSAGE_BYTES = 16 * 1024 * 1024
 # websockets emits complete frames at DEBUG, including the authentication frame.
 # Keep transport diagnostics while preventing payload logging even when Ambient's
 # operator-selected application level is DEBUG.
@@ -288,6 +292,7 @@ class HomeAssistantWebSocketAPI:
                     self._url,
                     open_timeout=self._timeout,
                     close_timeout=min(self._timeout, 5),
+                    max_size=_MAX_MESSAGE_BYTES,
                     proxy=self._proxy,
                     logger=_TRANSPORT_LOGGER,
                 ) as socket:

@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
+from websockets.asyncio.server import ServerConnection, serve
 
 import ambient_ha.ha.websocket as websocket_module
 from ambient_ha.ha.exceptions import (
@@ -11,6 +12,7 @@ from ambient_ha.ha.exceptions import (
     HomeAssistantAuthorizationError,
 )
 from ambient_ha.ha.websocket import (
+    _MAX_MESSAGE_BYTES,
     HomeAssistantWebSocketAPI,
     _command_outcome,
     _websocket_url,
@@ -99,6 +101,7 @@ async def test_websocket_connection_uses_explicit_proxy_policy(
     assert await api._run(operation, "test") == "ok"  # type: ignore[arg-type]
     assert captured["url"] == "ws://supervisor/core/websocket"
     assert captured["proxy"] is expected_proxy
+    assert captured["max_size"] == _MAX_MESSAGE_BYTES
     assert captured["logger"] is websocket_module._TRANSPORT_LOGGER
     assert websocket_module._TRANSPORT_LOGGER.getEffectiveLevel() >= logging.INFO
 
@@ -115,6 +118,49 @@ async def test_unknown_registry_command_is_reported_as_unsupported() -> None:
     assert supported is False
     assert rows == []
     assert socket.sent == [{"id": 4, "type": "config/floor_registry/list"}]
+
+
+@pytest.mark.anyio
+async def test_registry_response_larger_than_websockets_default_is_supported() -> None:
+    rows = [
+        {"entity_id": f"sensor.large_registry_{index}", "name": "x" * 220} for index in range(5_000)
+    ]
+    large_response = json.dumps({"id": 1, "type": "result", "success": True, "result": rows})
+    assert len(large_response.encode()) > 1_048_576
+    assert len(large_response.encode()) < _MAX_MESSAGE_BYTES
+
+    async def handler(socket: ServerConnection) -> None:
+        await socket.send(json.dumps({"type": "auth_required"}))
+        assert json.loads(await socket.recv())["type"] == "auth"
+        await socket.send(json.dumps({"type": "auth_ok"}))
+        for message_id, registry in enumerate(("entity", "device", "area", "floor"), start=1):
+            request = json.loads(await socket.recv())
+            assert request == {"id": message_id, "type": f"config/{registry}_registry/list"}
+            if registry == "entity":
+                await socket.send(large_response)
+            else:
+                await socket.send(
+                    json.dumps({"id": message_id, "type": "result", "success": True, "result": []})
+                )
+
+    async with serve(handler, "127.0.0.1", 0) as server:
+        assert server.sockets
+        port = server.sockets[0].getsockname()[1]
+        api = HomeAssistantWebSocketAPI(
+            base_url="http://127.0.0.1",
+            websocket_url=f"ws://127.0.0.1:{port}",
+            token="test-only",
+            timeout_seconds=5,
+            use_system_proxy=False,
+        )
+
+        snapshot = await api.get_registries()
+
+    assert len(snapshot.entities) == len(rows)
+    assert snapshot.entities[0]["entity_id"] == "sensor.large_registry_0"
+    assert snapshot.devices == ()
+    assert snapshot.areas == ()
+    assert snapshot.floors == ()
 
 
 @pytest.mark.anyio
