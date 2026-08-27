@@ -249,6 +249,7 @@ class HomeAssistantClient:
             websocket_url=settings.home_assistant_websocket_url,
             token=settings.home_assistant_token.get_secret_value(),
             timeout_seconds=settings.request_timeout_seconds,
+            use_system_proxy=settings.home_assistant_websocket_use_system_proxy,
         )
         self._registries = registry_provider or websocket_api
         self._automations = automation_provider or websocket_api

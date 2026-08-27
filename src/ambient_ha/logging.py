@@ -10,6 +10,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 _REDACTION_PATTERNS = (
+    re.compile(
+        r"""(?i)(["'](?:access[_-]?token|token|password|api[_-]?key)["']\s*[:=]\s*["'])[^"']*(?=["'])"""
+    ),
     re.compile(r"(?i)(authorization\s*[:=]\s*bearer\s+)[^\s,;\"']+"),
     re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._~+/=-]+"),
     re.compile(r"(?i)((?:token|password|api[_-]?key)\s*[:=]\s*)[^\s,;\"']+"),
@@ -47,3 +50,8 @@ def configure_logging(level: str) -> None:
     root.handlers.clear()
     root.addHandler(handler)
     root.setLevel(level)
+    # websockets logs complete text frames at DEBUG. Authentication frames contain
+    # access tokens, so dependency transport loggers remain above DEBUG regardless
+    # of the operator-selected Ambient application log level.
+    logging.getLogger("websockets.client").setLevel(logging.INFO)
+    logging.getLogger("websockets.server").setLevel(logging.INFO)

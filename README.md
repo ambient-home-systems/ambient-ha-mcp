@@ -4,11 +4,12 @@ Ambient Home Assistant MCP is a secure, semantic bridge that gives ChatGPT and
 other MCP clients purpose-built access to Home Assistant. It is the server
 foundation for the future user-facing **Ambient Home Assistant** application.
 
-> **Phase 6.6 status:** live installation confirms that `0.6.6` starts and its REST
-> authentication succeeds, but exposed incorrect standalone-style WebSocket URL
-> derivation for the Supervisor proxy. The `0.6.7` source candidate supplies
-> Supervisor's documented WebSocket endpoint explicitly. The App catalog remains
-> on `0.6.6` until the `0.6.7` multi-architecture image is published and verified;
+> **Phase 6.6 status:** live installation confirms that `0.6.7` starts and its REST
+> authentication succeeds, but WebSocket discovery still fails because automatic
+> proxy discovery can intercept the internal Supervisor connection. The `0.6.8`
+> source candidate disables system proxies for App-mode WebSocket transport and
+> protects authentication frames from DEBUG logging. The App catalog remains on
+> `0.6.7` until the `0.6.8` multi-architecture image is published and verified;
 > Home Assistant must never advertise an unpullable update. App mode remains
 > local/private and read-only and exposes only the 24 read tools.
 > **NO-GO FOR PHASE 7** until that validation passes.
@@ -154,7 +155,7 @@ Then connect the Inspector to `http://127.0.0.1:8000/mcp`.
 
 The repository now contains a Home Assistant App definition for `amd64` and
 `aarch64`. The currently advertised release is
-`ghcr.io/ambient-home-systems/ambient-ha-mcp:0.6.6`. Candidate images are published
+`ghcr.io/ambient-home-systems/ambient-ha-mcp:0.6.7`. Candidate images are published
 from immutable version tags and verified before a separate PR is allowed to update
 the App catalog version. The App never relies on `latest` for installation.
 

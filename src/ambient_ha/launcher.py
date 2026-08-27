@@ -145,6 +145,9 @@ def configure_home_assistant_app_environment(
 
     target["HOME_ASSISTANT_URL"] = SUPERVISOR_CORE_URL
     target["HOME_ASSISTANT_WEBSOCKET_URL"] = SUPERVISOR_WEBSOCKET_URL
+    # Supervisor is an internal App-network peer and must never be reached through
+    # proxy settings inherited from the host or container environment.
+    target["HOME_ASSISTANT_WEBSOCKET_USE_SYSTEM_PROXY"] = "false"
     target["HOME_ASSISTANT_TOKEN"] = supervisor_token
     target["READ_ONLY"] = "true"
     # The App network namespace is isolated; its host port remains disabled by default.

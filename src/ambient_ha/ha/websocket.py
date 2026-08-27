@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import ssl
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol, TypeVar
+from typing import Any, Literal, Protocol, TypeVar
 from urllib.parse import urlsplit, urlunsplit
 
 from websockets.asyncio.client import ClientConnection, connect
@@ -27,6 +28,11 @@ _UNSUPPORTED_COMMAND_CODES = {"unknown_command"}
 _NOT_FOUND_CODES = {"not_found"}
 _AUTHORIZATION_CODES = {"unauthorized"}
 T = TypeVar("T")
+_TRANSPORT_LOGGER = logging.getLogger("ambient_ha.ha.websocket.transport")
+# websockets emits complete frames at DEBUG, including the authentication frame.
+# Keep transport diagnostics while preventing payload logging even when Ambient's
+# operator-selected application level is DEBUG.
+_TRANSPORT_LOGGER.setLevel(logging.INFO)
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,10 +107,12 @@ class HomeAssistantWebSocketAPI:
         token: str,
         timeout_seconds: float,
         websocket_url: str | None = None,
+        use_system_proxy: bool = True,
     ) -> None:
         self._url = websocket_url or _websocket_url(base_url)
         self._token = token
         self._timeout = timeout_seconds
+        self._proxy: Literal[True] | None = True if use_system_proxy else None
 
     async def get_registries(self) -> RegistrySnapshot:
         """Fetch registries, treating individually unknown commands as unsupported."""
@@ -280,6 +288,8 @@ class HomeAssistantWebSocketAPI:
                     self._url,
                     open_timeout=self._timeout,
                     close_timeout=min(self._timeout, 5),
+                    proxy=self._proxy,
+                    logger=_TRANSPORT_LOGGER,
                 ) as socket:
                     await self._authenticate(socket)
                     return await operation(socket)

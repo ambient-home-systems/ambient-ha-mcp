@@ -12,6 +12,7 @@ def test_required_configuration_and_defaults() -> None:
 
     assert settings.home_assistant_url == "http://homeassistant.local:8123"
     assert settings.home_assistant_websocket_url is None
+    assert settings.home_assistant_websocket_use_system_proxy is True
     assert settings.home_assistant_token.get_secret_value() == "secret"
     assert settings.log_level == "INFO"
     assert settings.read_only is True

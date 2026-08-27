@@ -6,6 +6,24 @@ on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 
 ## [Unreleased]
 
+## [0.6.8] - 2026-08-27
+
+### Fixed
+
+- Disable automatic system-proxy discovery only for the App runtime's internal
+  Supervisor WebSocket connection, preventing `ws://supervisor/core/websocket`
+  from being routed through inherited proxy configuration. Standalone deployments
+  retain their existing automatic proxy behavior.
+
+### Security
+
+- Keep dependency WebSocket transport loggers above DEBUG so authentication frame
+  payloads cannot be emitted when Ambient DEBUG logging is selected.
+- Redact quoted JSON `access_token`, token, password, and API-key values as a
+  defense-in-depth safeguard for structured logs.
+- Add no Home Assistant write path, service call, token fallback, permission,
+  control tool, or Phase 7 functionality.
+
 ## [0.6.7] - 2026-08-26
 
 ### Fixed

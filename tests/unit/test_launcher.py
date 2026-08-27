@@ -37,6 +37,7 @@ def test_app_runtime_uses_supervisor_auth_and_forces_read_only(tmp_path: Path) -
     assert environ["HOME_ASSISTANT_URL"] == "http://supervisor/core"
     assert environ["HOME_ASSISTANT_WEBSOCKET_URL"] == "ws://supervisor/core/websocket"
     assert environ["HOME_ASSISTANT_WEBSOCKET_URL"] != "ws://supervisor/core/api/websocket"
+    assert environ["HOME_ASSISTANT_WEBSOCKET_USE_SYSTEM_PROXY"] == "false"
     assert environ["HOME_ASSISTANT_TOKEN"] == "supervisor-secret"
     assert environ["READ_ONLY"] == "true"
     assert environ["MCP_HOST"] == "0.0.0.0"  # noqa: S104

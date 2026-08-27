@@ -2,13 +2,16 @@
 
 ## Current status
 
-The currently advertised `0.6.6` package is an experimental Home Assistant App
+The currently advertised `0.6.7` package is an experimental Home Assistant App
 (formerly add-on) for `amd64` and `aarch64`. It is read only and exposes the same 24 tools as
 standalone Ambient MCP. Version `0.6.5` installed but could not start because its
 non-root entrypoint could not read Supervisor's root-only options file. `0.6.6`
 corrected startup, then live validation exposed an incorrect WebSocket route through
-the Supervisor proxy. The `0.6.7` source candidate explicitly selects the documented
-Supervisor WebSocket endpoint, but it must not be advertised until its versioned
+the Supervisor proxy. Version `0.6.7` selected the documented Supervisor WebSocket
+endpoint, but live discovery still failed because automatic system-proxy discovery
+could intercept that internal connection. The `0.6.8` source candidate explicitly
+bypasses system proxies in App mode and prevents DEBUG authentication-frame logging,
+but it must not be advertised until its versioned
 multi-architecture image is already published and verified. Complete live
 validation is outstanding; do not treat the package as production validated yet.
 
@@ -19,7 +22,7 @@ validation is outstanding; do not treat the package as production validated yet.
 - Network access from Home Assistant Supervisor to GitHub and GHCR.
 
 The version-aligned release image is
-`ghcr.io/ambient-home-systems/ambient-ha-mcp:0.6.6`. Home Assistant selects the
+`ghcr.io/ambient-home-systems/ambient-ha-mcp:0.6.7`. Home Assistant selects the
 matching architecture from its multi-architecture manifest. A newer version is not
 eligible for catalog promotion until the same versioned reference is independently
 verified for both supported platforms.
@@ -47,8 +50,10 @@ Supervisor provides `SUPERVISOR_TOKEN` and the App uses the official Core proxy.
 Missing Supervisor authentication causes a sanitized startup failure.
 
 The launcher configures REST through `http://supervisor/core` and WebSocket through
-`ws://supervisor/core/websocket`. Standalone deployments do not receive this
-override and continue to derive `/api/websocket` from `HOME_ASSISTANT_URL`.
+`ws://supervisor/core/websocket`. It disables system-proxy discovery for this
+internal App-network WebSocket transport. Standalone deployments do not receive
+these overrides and continue to derive `/api/websocket` from `HOME_ASSISTANT_URL`
+with their existing automatic proxy behavior.
 
 Supervisor stores `/data/options.json` for root-only access. The App entrypoint
 reads and validates that file during a short root bootstrap, then initializes the
@@ -120,8 +125,9 @@ local test repository. Configuration contains no credentials and no Ambient data
 - **Installed but immediately stops with no App log:** inspect **Settings → System
   → Logs → Supervisor** for the container exit category. Version `0.6.5` has a
   known `/data/options.json` permission defect; install `0.6.6` or later. Version
-  `0.6.6` starts but uses the wrong Supervisor WebSocket proxy route. Upgrade to
-  `0.6.7` only after Home Assistant offers it through the verified catalog. Do not
+  `0.6.7` starts and uses the correct route, but automatic proxy discovery can still
+  prevent WebSocket access. Upgrade to `0.6.8` only after Home Assistant offers it
+  through the verified catalog. Do not
   paste Supervisor tokens or private URLs into an issue.
 - **Health endpoint unreachable:** the App port is disabled by default. Confirm the
   App is running, then temporarily assign a trusted-LAN host port if HTTP validation
