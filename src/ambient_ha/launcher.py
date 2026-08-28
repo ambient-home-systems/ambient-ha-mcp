@@ -31,8 +31,20 @@ _OPTION_ENVIRONMENT_KEYS: Final = {
     "battery_warning_threshold": "BATTERY_WARNING_THRESHOLD",
     "ignored_diagnostic_entities": "IGNORED_DIAGNOSTIC_ENTITIES",
     "mcp_allowed_hosts": "MCP_ALLOWED_HOSTS",
+    "read_only": "READ_ONLY",
+    "control_enabled": "CONTROL_ENABLED",
+    "allowed_switch_entities": "ALLOWED_SWITCH_ENTITIES",
+    "allowed_scene_entities": "ALLOWED_SCENE_ENTITIES",
+    "allowed_script_entities": "ALLOWED_SCRIPT_ENTITIES",
 }
-_LIST_OPTIONS: Final = {"ignored_diagnostic_entities", "mcp_allowed_hosts"}
+_LIST_OPTIONS: Final = {
+    "ignored_diagnostic_entities",
+    "mcp_allowed_hosts",
+    "allowed_switch_entities",
+    "allowed_scene_entities",
+    "allowed_script_entities",
+}
+_BOOLEAN_OPTIONS: Final = {"read_only", "control_enabled"}
 
 
 class RuntimeConfigurationError(RuntimeError):
@@ -97,7 +109,13 @@ def _option_value(value: Any, *, option_name: str) -> str:
         raise RuntimeConfigurationError(
             f"Invalid list value for Home Assistant App option: {option_name}"
         )
-    if isinstance(value, bool) or value is None or isinstance(value, (dict, float)):
+    if isinstance(value, bool):
+        if option_name not in _BOOLEAN_OPTIONS:
+            raise RuntimeConfigurationError(
+                f"Invalid value for Home Assistant App option: {option_name}"
+            )
+        return "true" if value else "false"
+    if value is None or isinstance(value, (dict, float)):
         raise RuntimeConfigurationError(
             f"Invalid value for Home Assistant App option: {option_name}"
         )
@@ -116,6 +134,17 @@ def _option_value(value: Any, *, option_name: str) -> str:
             for item in normalized
         ):
             raise RuntimeConfigurationError("Unsafe Home Assistant App MCP Host allowlist")
+        expected_domain = {
+            "allowed_switch_entities": "switch",
+            "allowed_scene_entities": "scene",
+            "allowed_script_entities": "script",
+        }.get(option_name)
+        if expected_domain is not None and any(
+            not item.casefold().startswith(f"{expected_domain}.") for item in normalized
+        ):
+            raise RuntimeConfigurationError(
+                f"Invalid {expected_domain} entity in Home Assistant App control allowlist"
+            )
         return ",".join(normalized)
     if isinstance(value, (str, int)):
         return str(value)
@@ -138,6 +167,12 @@ def configure_home_assistant_app_environment(
         raise RuntimeConfigurationError("Supervisor authentication is unavailable")
 
     options = _read_app_options(options_path)
+    # Missing options after an install or upgrade always preserve the safe gates.
+    target["READ_ONLY"] = "true"
+    target["CONTROL_ENABLED"] = "false"
+    target["ALLOWED_SWITCH_ENTITIES"] = ""
+    target["ALLOWED_SCENE_ENTITIES"] = ""
+    target["ALLOWED_SCRIPT_ENTITIES"] = ""
     for option_name, value in options.items():
         target[_OPTION_ENVIRONMENT_KEYS[option_name]] = _option_value(
             value, option_name=option_name
@@ -149,7 +184,6 @@ def configure_home_assistant_app_environment(
     # proxy settings inherited from the host or container environment.
     target["HOME_ASSISTANT_WEBSOCKET_USE_SYSTEM_PROXY"] = "false"
     target["HOME_ASSISTANT_TOKEN"] = supervisor_token
-    target["READ_ONLY"] = "true"
     # The App network namespace is isolated; its host port remains disabled by default.
     target["MCP_HOST"] = "0.0.0.0"  # noqa: S104
     target["MCP_PORT"] = "8000"

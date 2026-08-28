@@ -16,13 +16,14 @@ from ambient_ha.policy.models import (
 
 
 class ActionPlanner:
-    """Build explicit authorization plans without a Home Assistant write client."""
+    """Build explicit authorization plans for the central action executor."""
 
-    def __init__(self, policy: PolicyEngine) -> None:
+    def __init__(self, policy: PolicyEngine, *, execution_available: bool = False) -> None:
         self._policy = policy
+        self._execution_available = execution_available
 
     def plan(self, request: ActionRequest) -> ActionPlan:
-        """Create a bounded dry run; execution is impossible in Phase 6."""
+        """Create a bounded plan; only an all-allow plan may become executable."""
         limits = self._policy.config.limits
         mass_allowed = (
             len(request.targets) <= limits.max_entities_per_action
@@ -57,15 +58,6 @@ class ActionPlanner:
                 reason="No resolved canonical target was supplied.",
                 matched_rule="target_resolution.missing",
             )
-        if not mass_allowed:
-            return self._blocked_plan(
-                request,
-                mass_result,
-                reason=mass_reason or "Mass-action policy denied the request.",
-                matched_rule="mass_action.limit",
-                denied_targets=[target.entity_id for target in request.targets],
-            )
-
         decisions: list[PolicyDecision] = []
         for target in request.targets:
             if not target.capability_known:
@@ -74,7 +66,8 @@ class ActionPlanner:
                         decision=PolicyAction.DENY,
                         operation_class=request.operation_class,
                         target=target.entity_id,
-                        reason="Target capability is unknown; planning fails closed.",
+                        reason=target.capability_reason
+                        or "Target capability is unknown; planning fails closed.",
                         matched_rule="capability.unknown",
                     )
                 )
@@ -84,7 +77,8 @@ class ActionPlanner:
                         decision=PolicyAction.DENY,
                         operation_class=request.operation_class,
                         target=target.entity_id,
-                        reason="The target does not support the requested capability.",
+                        reason=target.capability_reason
+                        or "The target does not support the requested capability.",
                         matched_rule="capability.unsupported",
                     )
                 )
@@ -99,6 +93,15 @@ class ActionPlanner:
 
         if request.operation_class is OperationClass.READ and not decisions:
             decisions.append(self._policy.evaluate(OperationClass.READ))
+
+        if not mass_allowed:
+            return self._blocked_plan(
+                request,
+                mass_result,
+                reason=mass_reason or "Mass-action policy denied the request.",
+                matched_rule="mass_action.limit",
+                denied_targets=[target.entity_id for target in request.targets],
+            )
 
         allowed = [item.target for item in decisions if item.allowed and item.target is not None]
         denied = [
@@ -144,8 +147,8 @@ class ActionPlanner:
             confirmation=confirmation_requirement,
             predicted_service=request.predicted_service,
             predicted_payload=_sanitized_mapping(request.predicted_payload),
-            executable=False,
-            execution_available=False,
+            executable=overall is PolicyAction.ALLOW and self._execution_available,
+            execution_available=self._execution_available,
             reason=reason,
         )
 

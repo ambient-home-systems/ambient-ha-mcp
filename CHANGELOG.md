@@ -6,6 +6,33 @@ on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-27
+
+### Added
+
+- Seven exact-target semantic control tools for lights, fans, media players,
+  climate entities, explicitly authorized switches, scenes, and scripts.
+- A single server-side action executor that performs canonical target resolution,
+  capability validation, policy planning, fixed service mapping, bounded state
+  verification, and pre/post audit emission.
+- Independent `READ_ONLY` and `CONTROL_ENABLED` gates, both safe by default, plus
+  exact App allowlists for switches, scenes, and scripts.
+- Normalized verified, accepted, partially verified, denied, confirmation-required,
+  clarification-required, read-only, disabled, unsupported, and failed outcomes.
+
+### Security
+
+- Keep exact canonical entity IDs as the only writable target form; names and areas
+  must first be resolved with read-only discovery and are never auto-selected.
+- Continue to prohibit locks, alarms, covers/garage doors, valves, buttons, sirens,
+  vacuums, remotes, administrative actions, automation triggering, and arbitrary
+  Home Assistant service calls.
+- Reject caller-supplied confirmation shortcuts. Confirmation-required actions
+  remain blocked, and Phase 7 scene decisions cannot be downgraded to `allow`.
+- Never accept arbitrary media URLs, script variables, or raw service data.
+- Keep real Home Assistant writes opt-in and absent from automated tests unless a
+  harmless entity is explicitly designated through the documented live-test gates.
+
 ## [0.6.9] - 2026-08-27
 
 ### Fixed

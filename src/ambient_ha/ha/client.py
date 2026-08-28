@@ -52,6 +52,7 @@ from ambient_ha.models.automation import (
     AutomationTracesPage,
     CausalityEvidence,
 )
+from ambient_ha.models.control import ControlServiceCall
 from ambient_ha.models.diagnostics import ConnectionStatus
 from ambient_ha.models.discovery import (
     AreaDetail,
@@ -219,6 +220,16 @@ class HomeAssistantGateway(Protocol):
         limit: int,
     ) -> tuple[bool, ActivityCauseReport]:
         """Correlate recorder and trace facts under strict evidence rules."""
+        ...
+
+    async def resolve_control_entities(
+        self, entity_ids: list[str]
+    ) -> tuple[list[EntityDetail], list[str]]:
+        """Resolve exact control targets from one fresh state snapshot."""
+        ...
+
+    async def execute_control(self, call: ControlServiceCall) -> None:
+        """Execute one bounded service call created by the central action executor."""
         ...
 
 
@@ -721,6 +732,24 @@ class HomeAssistantClient:
     async def refresh_discovery_cache(self) -> None:
         """Explicitly invalidate registry metadata; states are never cached."""
         await self._registry_cache.clear()
+
+    async def resolve_control_entities(
+        self, entity_ids: list[str]
+    ) -> tuple[list[EntityDetail], list[str]]:
+        """Resolve exact canonical IDs without fuzzy matching or automatic selection."""
+        states, resolver = await self._states_and_resolver()
+        by_id = {
+            entity.entity_id: entity
+            for entity in resolver.entities(states, include_attributes=True)
+            if entity.entity_id in entity_ids
+        }
+        return [by_id[item] for item in entity_ids if item in by_id], [
+            item for item in entity_ids if item not in by_id
+        ]
+
+    async def execute_control(self, call: ControlServiceCall) -> None:
+        """Send the executor's fixed semantic mapping to Home Assistant."""
+        await self._rest.call_control_service(call)
 
     async def refresh_automation_cache(self) -> None:
         """Invalidate the bounded automation reference index."""

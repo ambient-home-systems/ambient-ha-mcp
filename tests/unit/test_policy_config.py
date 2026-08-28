@@ -122,7 +122,7 @@ def test_environment_read_only_cannot_be_disabled_by_policy_file(tmp_path: Path)
 
     assert environment_boundary.read_only is True
     assert both_disabled.read_only is False
-    assert no_file.read_only is True
+    assert no_file.read_only is False
 
 
 def test_missing_or_malformed_policy_file_fails_startup_loading(tmp_path: Path) -> None:

@@ -2,19 +2,20 @@
 
 ## Current status
 
-The currently advertised `0.6.8` package is an experimental Home Assistant App
-(formerly add-on) for `amd64` and `aarch64`. It is read only and exposes the same 24 tools as
-standalone Ambient MCP. Version `0.6.5` installed but could not start because its
+The currently advertised `0.6.9` package is the live-validated read-only baseline
+for the experimental Home Assistant App (formerly add-on) on `amd64` and `aarch64`.
+It passed all 24 read tools on a real Home Assistant installation. Version `0.6.5`
+installed but could not start because its
 non-root entrypoint could not read Supervisor's root-only options file. `0.6.6`
 corrected startup, then live validation exposed an incorrect WebSocket route through
 the Supervisor proxy. Version `0.6.7` selected the documented Supervisor WebSocket
 endpoint. Version `0.6.8` explicitly bypassed system proxies in App mode and
 prevented DEBUG authentication-frame logging, but live discovery still failed when
 a real registry response exceeded the WebSocket dependency's 1 MiB default receive
-limit. The `0.6.9` source candidate applies an explicit 16 MiB ceiling, but it must
-not be advertised until its versioned
-multi-architecture image is already published and verified. Complete live
-validation is outstanding; do not treat the package as production validated yet.
+limit. Version `0.6.9` applies an explicit 16 MiB ceiling and was published,
+promoted, installed, and validated only after both architecture images and the
+public manifest were verified. Phase 7 source adds gated controls but remains
+unreleased until its own review, publication, catalog promotion, and live checks.
 
 ## Prerequisites
 
@@ -23,7 +24,7 @@ validation is outstanding; do not treat the package as production validated yet.
 - Network access from Home Assistant Supervisor to GitHub and GHCR.
 
 The version-aligned release image is
-`ghcr.io/ambient-home-systems/ambient-ha-mcp:0.6.8`. Home Assistant selects the
+`ghcr.io/ambient-home-systems/ambient-ha-mcp:0.6.9`. Home Assistant selects the
 matching architecture from its multi-architecture manifest. A newer version is not
 eligible for catalog promotion until the same versioned reference is independently
 verified for both supported platforms.
@@ -71,8 +72,9 @@ testing only:
 2. Add the exact hostname used by the client, plus its `hostname:*` form, to
    `mcp_allowed_hosts`. If using an IP address, add the exact IP and `IP:*`.
 3. Connect MCP Inspector to `http://<host>:<port>/mcp`.
-4. Confirm exactly 24 tools, call representative discovery/history/diagnostic/
-   automation tools, and check `http://<host>:<port>/health`.
+4. On v0.6.9, confirm exactly 24 tools. A reviewed Phase 7 candidate exposes 31.
+   Call representative discovery/history/diagnostic/automation tools and check
+   `http://<host>:<port>/health` before considering any explicitly designated write.
 5. Remove the host-port assignment after validation.
 
 Use [the sanitized Phase 6.6 report template](phase-6-6-live-validation.md) to
@@ -85,15 +87,20 @@ used because it is a UI proxy, not the MCP client's authentication mechanism.
 
 ## Options
 
-Configuration covers log level, Home Assistant request timeout, registry cache
-TTL, Recorder query bounds, low-battery threshold, ignored diagnostic entity IDs,
-and exact allowed MCP Host headers. Supervisor validates basic ranges, and the
-Python settings layer validates cross-field history limits. Unknown launcher
-options fail startup instead of silently expanding authority.
+The advertised v0.6.9 metadata covers bounded read settings and exact MCP Host
+headers. Phase 7 launcher code supports independent `read_only` and
+`control_enabled` gates plus exact switch/scene/script allowlists, but those options
+must not appear in the catalog until the v0.7.0 image is published and verified.
+The separate catalog-promotion PR adds the schema and translations atomically with
+the version change, using safe `true`/`false` defaults.
 
-There is no Home Assistant URL, token, read-only toggle, policy file, generic
-service, or control option. App mode always uses the shared server implementation
-with `READ_ONLY=true`.
+Once promoted, writes require both gates to be deliberately changed. Lights, fans,
+media players, and climate entities then remain subject to capabilities, values,
+limits, verification, and audit. Switches, scenes, and scripts additionally require
+exact entity IDs in their corresponding allowlists; scenes still remain blocked until
+secure server-verifiable confirmation exists. There is no Home Assistant
+token, external policy file, generic service, caller confirmation, script-variable,
+or raw-payload option.
 
 ## Upgrade and rollback
 
@@ -127,9 +134,9 @@ local test repository. Configuration contains no credentials and no Ambient data
   → Logs → Supervisor** for the container exit category. Version `0.6.5` has a
   known `/data/options.json` permission defect; install `0.6.6` or later. Version
   `0.6.8` starts, uses the correct route, and bypasses system proxies, but larger
-  registries can still exceed its 1 MiB transport receive limit. Upgrade to `0.6.9`
-  only after Home Assistant offers it through the verified catalog. Do not
-  paste Supervisor tokens or private URLs into an issue.
+  registries can still exceed its 1 MiB transport receive limit. Upgrade through
+  the verified catalog to the currently advertised `0.6.9` release. Do not paste
+  Supervisor tokens or private URLs into an issue.
 - **Health endpoint unreachable:** the App port is disabled by default. Confirm the
   App is running, then temporarily assign a trusted-LAN host port if HTTP validation
   is required.

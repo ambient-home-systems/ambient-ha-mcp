@@ -11,7 +11,9 @@ flowchart TD
     Client[MCP host] --> Server[MCP server]
     Server --> Tools[Semantic tool services]
     Tools --> Policy[Server-side policy]
+    Policy --> Executor[Central action executor]
     Tools --> Gateway[HomeAssistantClient facade]
+    Executor --> Gateway
     Gateway --> REST[REST adapter]
     Gateway --> WS[WebSocket registry adapter]
     Gateway -. when useful .-> HAMCP[HA MCP or Assist adapter]
@@ -32,30 +34,34 @@ installation data.
 ### Semantic tool services
 
 Represent user goals such as diagnosing connectivity, resolving an entity,
-searching a home's semantic inventory, reading recorded facts, and summarizing
-areas, floors, or the whole home. Later tools should follow the same pattern for
-narrowly scoped controls. A generic `call_ha_api` or
+searching a home's semantic inventory, reading recorded facts, summarizing the
+home, and performing narrowly scoped Phase 7 controls. A generic `call_ha_api` or
 `call_service` tool is explicitly outside the architecture.
 
 ### Policy engine
 
 Makes authorization decisions on the server, independently of any MCP-host
 confirmation UI and independently of the Home Assistant credential's upstream
-privilege. Phase 6 models `allow`, `deny`, and `confirm_required`; canonical
+privilege. The engine models `allow`, `deny`, and `confirm_required`; canonical
 resolved targets; protected-entity, entity, domain, operation, and global rules;
-typed value bounds; mass-action limits; confirmation requirements; dry-run plans;
-and redacted audit events. There is still no action executor or write-capable
-client method.
+typed value bounds; mass-action limits; confirmation requirements; action plans;
+and redacted audit events. Only an all-allow plan with execution available can
+cross the central executor.
 
 Exact precedence is:
 
 1. hard `READ_ONLY` boundary;
-2. hard administrative prohibition;
-3. protected entity;
-4. explicit entity rule;
-5. domain rule;
-6. operation-class rule; and
-7. global default.
+2. hard `CONTROL_ENABLED` boundary;
+3. hard administrative prohibition;
+4. protected entity;
+5. explicit entity rule;
+6. domain rule;
+7. operation-class rule; and
+8. global default.
+
+After normal rule precedence, Phase 7 applies a scene-specific confirmation floor:
+any non-deny scene result becomes `confirm_required`. Because no server-verifiable
+confirmation mechanism exists yet, an exact `allow` rule cannot execute a scene.
 
 Policy never consumes friendly names, aliases, template text, trace messages, or
 other Home Assistant natural-language data. Area and floor IDs are carried as
@@ -68,6 +74,7 @@ Is the semantic facade used by application services. It coordinates:
 
 - REST for fresh current-state snapshots and selected safe metadata;
 - REST for official Recorder history and logbook reads; and
+- REST for fixed, executor-authorized Phase 7 semantic service calls;
 - WebSocket for entity, device, area, and floor registry snapshots;
 - WebSocket for loaded automation configuration and stored automation traces; and
 - Home Assistant MCP/Assist only where its semantics are useful.
@@ -94,9 +101,10 @@ options, and then changes supplementary groups, GID, and UID to the fixed
 identity by starting directly as `ambient`. Application request handling never
 runs as root.
 
-App mode overwrites any inherited Home Assistant URL/token, hard-forces
-`READ_ONLY=true`, clears `POLICY_FILE`, binds inside the isolated App network, and
-allows no browser origins. The Home Assistant App definition keeps its host port
+App mode overwrites any inherited Home Assistant URL/token, defaults to
+`READ_ONLY=true` and `CONTROL_ENABLED=false`, clears `POLICY_FILE`, binds inside the
+isolated App network, and allows no browser origins. The Home Assistant App
+definition keeps its host port
 disabled by default. The same REST and WebSocket adapters use runtime-supplied
 transport endpoints through Supervisor's Core proxy; no parallel Home Assistant
 client exists. Standalone mode continues to derive `/api/websocket` from its
@@ -246,35 +254,41 @@ HTTP 200 means the bridge process is live. `status: degraded` means Home Assista
 readiness is impaired. Docker therefore does not restart a healthy bridge merely
 because Home Assistant is restarting or temporarily offline.
 
-## Future write authorization flow
+## Phase 7 write authorization flow
 
-Phase 6 establishes—but does not activate—the following flow:
+Phase 7 activates only the allow branch of the following flow:
 
 ```mermaid
 flowchart TD
-    Tool[MCP semantic tool] --> Resolve[Semantic target resolution]
+    Tool[MCP semantic tool] --> Validate[Input validation]
+    Validate --> Resolve[Exact target resolution]
     Resolve --> Canonical[Canonical entity IDs]
     Canonical --> Capability[Capability validation]
     Capability --> Policy[Server-side policy engine]
-    Policy --> Confirm[Server-verifiable confirmation]
-    Confirm -. not implemented .-> Executor[Central action executor]
-    Executor -. not implemented .-> Client[HomeAssistantClient]
-    Client -. no write adapter .-> HA[Home Assistant API]
+    Policy --> Confirm[Confirmation evaluation]
+    Confirm --> Limits[Mass-action and value limits]
+    Limits --> Plan[ActionPlan]
+    Plan --> Executor[Central action executor]
+    Executor --> Client[HomeAssistantClient]
+    Client --> HA[Fixed HA service mapping]
+    HA --> Verify[Bounded fresh-state verification]
+    Verify --> Audit[Final redacted audit]
 ```
 
-Authorization occurs only after resolution. A phrase such as “garage lights” is
-never authorized and then expanded later. Ambiguous resolution yields a modeled
+Authorization occurs only after resolution. Phase 7 accepts exact canonical entity
+IDs only; a phrase such as “garage lights” must first use read-only search and is
+never authorized and expanded later. Missing resolution yields a modeled
 clarification requirement. A mixed-target plan explicitly separates allowed,
 denied, and confirmation targets; any denial makes the overall plan deny so a
 future executor cannot silently perform only a subset.
 
 The internal `ActionPlanner` enforces target and operation limits before evaluating
 individual rules, rejects unknown capabilities, applies value constraints without
-clamping, sanitizes predicted service data, and always returns
-`execution_available: false` / `executable: false`. Confirmation is represented as
-an unverified server-challenge requirement; Phase 6 accepts no `confirmed=true`
-input. `AuditEvent` and `AuditSink` provide a bounded, redacted structured-log seam
-without adding persistent storage.
+clamping, and sanitizes predicted service data. An all-allow plan becomes executable
+only when the central executor is available. Confirmation remains an unverified
+server-challenge requirement and cannot execute; no tool accepts `confirmed=true`.
+The executor emits a required pre-write audit event, calls one fixed semantic service,
+performs bounded fresh-state verification where practical, and emits a final result.
 
 ## Planned extension rules
 

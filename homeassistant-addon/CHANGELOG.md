@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0
+
+- Add seven policy-controlled semantic tools through one audited central executor.
+- Require both `read_only: false` and `control_enabled: true`; upgrades and fresh
+  installs retain safe `true`/`false` defaults.
+- Require exact allowlists for switches and scripts, and keep scenes confirmation-blocked.
+- Preserve prohibited domains, private/LAN-only deployment guidance, fixed service
+  mappings, bounded verification, and the image-before-catalog release invariant.
+
 ## 0.6.9
 
 - Accept bounded Home Assistant registry responses up to 16 MiB instead of inheriting

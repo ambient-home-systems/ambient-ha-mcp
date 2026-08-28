@@ -57,7 +57,7 @@ def sanitize_audit_value(value: object, *, _depth: int = 0) -> object:
 
 
 class AuditEvent(BaseModel):
-    """A safe, structured future-action audit event."""
+    """A safe, structured semantic-action audit event."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -70,13 +70,17 @@ class AuditEvent(BaseModel):
     resolved_targets: list[str] = Field(default_factory=list)
     policy_decision: PolicyAction
     confirmation_state: str
-    execution_result: str = "not_executed_phase_6"
+    execution_result: str = "not_executed"
     reason: str
     metadata: dict[str, object] = Field(default_factory=dict)
 
     @classmethod
     def from_plan(
-        cls, plan: ActionPlan, *, metadata: Mapping[str, object] | None = None
+        cls,
+        plan: ActionPlan,
+        *,
+        execution_result: str = "not_executed",
+        metadata: Mapping[str, object] | None = None,
     ) -> AuditEvent:
         """Create an audit event whose metadata has already crossed redaction."""
         safe_metadata = sanitize_audit_value(metadata or {})
@@ -93,6 +97,7 @@ class AuditEvent(BaseModel):
             confirmation_state=(
                 plan.confirmation.status if plan.confirmation is not None else "not_required"
             ),
+            execution_result=execution_result,
             reason=plan.reason,
             metadata=safe_metadata if isinstance(safe_metadata, dict) else {},
         )

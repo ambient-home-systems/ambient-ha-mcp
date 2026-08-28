@@ -20,10 +20,11 @@ from ambient_ha.ha.exceptions import (
     HomeAssistantUnexpectedResponse,
     HomeAssistantUnreachableError,
 )
+from ambient_ha.models.control import ControlServiceCall
 
 
 class HomeAssistantRestAPI:
-    """Read-only REST access used behind :class:`HomeAssistantClient`."""
+    """REST access used only behind :class:`HomeAssistantClient`."""
 
     def __init__(
         self,
@@ -108,6 +109,19 @@ class HomeAssistantRestAPI:
             )
         return payload
 
+    async def call_control_service(self, call: ControlServiceCall) -> list[Mapping[str, Any]]:
+        """Execute one prevalidated semantic service call from the central executor."""
+        payload = await self._request_json(
+            f"/api/services/{call.domain.value}/{call.service}",
+            method="POST",
+            json_data={"entity_id": call.entity_ids, **call.data},
+        )
+        if not isinstance(payload, list):
+            raise HomeAssistantUnexpectedResponse(
+                "Home Assistant returned service-call data in an unexpected shape."
+            )
+        return [item for item in payload if isinstance(item, dict)]
+
     async def _get_json(self, path: str) -> Mapping[str, Any]:
         payload = await self._request_json(path)
         if not isinstance(payload, dict):
@@ -120,6 +134,8 @@ class HomeAssistantRestAPI:
         self,
         path: str,
         *,
+        method: str = "GET",
+        json_data: Mapping[str, object] | None = None,
         allow_not_found: bool = False,
         unavailable_error: type[HomeAssistantError] | None = None,
     ) -> Any:
@@ -135,7 +151,7 @@ class HomeAssistantRestAPI:
                 transport=self._transport,
                 follow_redirects=False,
             ) as client:
-                response = await client.get(path)
+                response = await client.request(method, path, json=json_data)
         except httpx.InvalidURL as exc:
             raise HomeAssistantInvalidURL("The configured Home Assistant URL is invalid.") from exc
         except httpx.TimeoutException as exc:

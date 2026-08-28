@@ -48,9 +48,23 @@ def test_home_assistant_app_metadata_is_safe_and_never_leads_package_version() -
     assert config["environment"] == {"AMBIENT_RUNTIME_MODE": "home_assistant_app"}
 
     options = config["options"]
+    schema = config["schema"]
     assert isinstance(options, dict)
+    assert isinstance(schema, dict)
     assert "home_assistant_token" not in options
-    assert "read_only" not in options
+    if semantic_version(config["version"]) < semantic_version(ambient_ha.__version__):
+        # Source code may lead the catalog only while new runtime options remain
+        # unadvertised. Otherwise users of the old image could configure keys it rejects.
+        assert "read_only" not in options
+        assert "control_enabled" not in options
+        assert "read_only" not in schema
+        assert "control_enabled" not in schema
+    else:
+        assert options["read_only"] is True
+        assert options["control_enabled"] is False
+        assert options["allowed_switch_entities"] == []
+        assert options["allowed_scene_entities"] == []
+        assert options["allowed_script_entities"] == []
     assert "policy_file" not in options
 
 

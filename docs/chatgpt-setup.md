@@ -3,8 +3,9 @@
 ## Local verification
 
 Start the bridge and test `http://127.0.0.1:8000/mcp` with MCP Inspector before
-involving ChatGPT. Verify that all 24 read-only tools appear, discovery and historical reads
-return structured data, an invalid token produces `authentication_failed`, and no
+involving ChatGPT. The v0.6.9 baseline has 24 read tools; Phase 7 source has 31 total
+tools. Verify discovery and historical reads return structured data, control tools
+report `read_only` under defaults, an invalid token produces `authentication_failed`, and no
 response contains tokens, private URLs, camera streams, coordinates, raw
 configuration, or raw historical attributes.
 
@@ -28,7 +29,7 @@ guide and [MCP server guidance](https://developers.openai.com/api/docs/mcp).
 
 **Do not expose this server directly to the public internet.** It has Home
 Assistant credentials but intentionally does not yet implement bridge OAuth or
-user authentication. Phase 6 server-side policy is defense in depth, not public
+user authentication. Phase 7 server-side policy is defense in depth, not public
 endpoint authentication. A later phase should evaluate Secure MCP Tunnel for the
 private Home Assistant network, then add supported authentication and deployment
 hardening before any public endpoint.
@@ -62,4 +63,5 @@ plugins use reviewed metadata snapshots and have a separate update process.
 - "Give me a quick whole-home status without listing every entity."
 - "Are any batteries low, doors open, or devices unavailable?"
 - "Report deterministic home findings and show the sensor evidence."
-- "Turn off the kitchen lights." (Expected: no matching control tool.)
+- "Turn off the kitchen lights." (Expected under defaults: exact target discovery,
+  then a structured `read_only` result without execution.)
